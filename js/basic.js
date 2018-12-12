@@ -27,5 +27,13 @@ app.ticker.add(function(delta) {
     // delta is 1 if running at 100% performance
     // creates frame-independent transformation
     // bunny.rotation += 0.01 * delta;
-    bunny.x += 0.1 * delta;
+    // console.log(spritesDistance(bunny, carrot))
+    bunny.x -= 0.1 * delta;
+    bunny.y -= 0.1 * delta;
 });
+
+function spritesDistance(spriteA, spriteB) {
+    var dx = spriteA.x - spriteB.x;
+    var dy = spriteA.y - spriteB.y;
+    return Math.sqrt(dx*dx + dy*dy);
+}

@@ -1,5 +1,5 @@
 let INITIAL_POPULATION = 100;
-let GENES_SIZE = 512;
+let GENES_SIZE = 128;
 let FITTEST = 20;
 let MUTATE_PROB = 1/GENES_SIZE;
 let CROSSOVER = 0.5;
@@ -62,6 +62,7 @@ function generateOffspring() {
     population = offspring;
 }
 
+/*
 createInitialPopulation();
 
 for (let i=0; i<MAX_GENERATIONS; ++i) {
@@ -80,3 +81,4 @@ for (let i=0; i<MAX_GENERATIONS; ++i) {
     selection();
     generateOffspring();
 }
+*/
