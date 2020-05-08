@@ -5,7 +5,7 @@ Evolution like three.js based game
 ## Demo
 
 You can see the progression of the game in the following [page](https://bernatixer.github.io/Gevolution/).
-> Note: This page is not up to date with the code
+> Note: Demo is not up to date with the code
 
 
 ## Installation
