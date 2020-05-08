@@ -1,7 +1,6 @@
 # Gevolution
 
 Evolution like three.js based game
-Inline-style: 
 ![Gevolution](/images/gevolution.png "Gevolution")
 
 ## Demo
