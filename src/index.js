@@ -8,7 +8,7 @@ import { createWebGLRenderer } from './components/webGLRenderer'
 import VoxelWorld from './components/voxelWorld'
 import SimplexNoise from 'simplex-noise';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
-import cameras from './components/cameras'
+import lights from './components/lights'
 
 var camera, scene, controls;
 var webglRenderer;
@@ -17,9 +17,10 @@ var container;
 var stats;
 var clock = new THREE.Clock();
 
-var pollo;
+var world;
+var pollo, polloHelper;
 
-init();
+init()
 animate();
 
 function init() {
@@ -36,13 +37,13 @@ function init() {
     // scene.add(axes);
     // scene.add(gridXZ);
     
-    cameras.addAmbientLight(scene);
-    cameras.addDirectionalLight(scene);
+    lights.addAmbientLight(scene);
+    lights.addDirectionalLight(scene);
     
     const cellSize = 32;
-    const mapWidth = 3*cellSize;
+    const mapWidth = 5*cellSize;
     camera = createCamera(mapWidth);
-    const world = new VoxelWorld(cellSize);
+    world = new VoxelWorld(cellSize);
     const simplex = new SimplexNoise('seed');
 
     for (let y = 0; y < cellSize; ++y) {
@@ -88,12 +89,16 @@ function init() {
       let noise = simplex.noise2D(32/150, 32/150);
       noise = Math.floor(noise*cellSize/2 + cellSize/2);
       root.position.x = 32;
-      root.position.y = noise+1+height;
+      root.position.y = noise+1+height + 25;
       root.position.z = 32;
+      root.rotation.y = -Math.PI / 2;
       scene.add(root);
       pollo = root;
-      // var boxHelper = new THREE.BoxHelper(root);
-      // scene.add(boxHelper);
+
+      pollo.userData.velocity = 1;
+      // pollo.userData.direction = new THREE.Vector3(0,-1,0);
+      polloHelper = new THREE.BoxHelper(pollo);
+      scene.add(polloHelper);
     });
 
     webglRenderer = createWebGLRenderer();
@@ -123,6 +128,7 @@ function drawCell(world, x, y, z) {
   geometry.setIndex(indices);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
+  mesh.castShadow = true;
   scene.add(mesh);
 }
 
@@ -134,12 +140,83 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-
-    let delta = clock.getDelta();
-    // if (pollo) pollo.translateZ( -1 * delta )
-
+    movePollo();
     controls.update();
     render();
+}
+
+function movePollo() {
+  const delta = clock.getDelta();
+  const gravity = new THREE.Vector3(0,-9.81,);
+  const elapsed = clock.elapsedTime;
+  
+  if (pollo) {
+    const velocity = pollo.userData.velocity;
+    polloHelper.update();
+    // Nomes s'aplica si esta a l'aire
+    let gravity = new THREE.Vector3(0,-1,0);
+    if (!isInGround(pollo)) {
+      gravity.multiplyScalar(0.5); // Falta acceleracio
+    } else {
+      gravity.multiplyScalar(0);
+    }
+    const direction = new THREE.Vector3(0,0,-1).multiplyScalar(0.33);
+    direction.add(gravity);
+    pollo.translateOnAxis(direction, 1);
+    if (!canMove(pollo)) {
+      pollo.translateOnAxis(direction, -1);
+    }
+  }
+}
+
+function canMove(entity) {
+  let canMove = true;
+  const vertices = getBoxVertices(entity);
+  vertices.forEach(vertex => {
+    if (world.getVoxel(...vertex)) {
+      canMove = false;
+      return;
+    }
+  });
+  return canMove;
+}
+
+function isInGround(entity) {
+  let inGround = false;
+  const vertices = getLowerVertices(entity);
+  vertices.forEach(vertex => {
+    // console.log(vertex);
+    // console.log(world.getVoxel(...vertex));
+    if (world.getVoxel(...vertex)) {
+      inGround = true;
+      return;
+    }
+  });
+  return inGround;
+}
+
+function getBoxVertices(objext) {
+  const box = new THREE.Box3().setFromObject(objext);
+  return [
+    [ Math.floor(box.min.x), Math.floor(box.min.y), Math.floor(box.min.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.min.y), Math.floor(box.max.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.max.y), Math.floor(box.min.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.max.y), Math.floor(box.max.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y), Math.floor(box.min.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y), Math.floor(box.max.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.max.y), Math.floor(box.min.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.max.y), Math.floor(box.max.z) ],
+  ];
+}
+
+function getLowerVertices(objext) {
+  const box = new THREE.Box3().setFromObject(objext);
+  return [
+    [ Math.floor(box.min.x), Math.floor(box.min.y)-1, Math.floor(box.min.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.min.y)-1, Math.floor(box.max.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y)-1, Math.floor(box.min.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y)-1, Math.floor(box.max.z) ],
+  ];
 }
 
 function render() {

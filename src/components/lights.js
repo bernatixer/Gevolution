@@ -3,10 +3,11 @@ import * as THREE from 'three';
 const funcs = {
     addDirectionalLight(scene) {
         var directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(100,100,100);
+        directionalLight.position.set(-300,300,-300);
         directionalLight.castShadow = true;
     
         scene.add(directionalLight);
+        
         const helper = new THREE.DirectionalLightHelper(directionalLight);
         scene.add(helper);
         
