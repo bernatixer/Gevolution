@@ -98,6 +98,7 @@ function init() {
       pollo.userData.velocity = new THREE.Vector3(0,0,-5);
       pollo.userData.acceleration = new THREE.Vector3(0,-1,0);
       pollo.userData.lastElapsed = clock.elapsedTime;
+      pollo.userData.resetGravity = false;
       polloHelper = new THREE.BoxHelper(pollo);
       scene.add(polloHelper);
     });
@@ -150,8 +151,9 @@ function movePollo() {
   const delta = clock.getDelta();
   const elapsed = clock.getElapsedTime();
   if (pollo) {
-    if (isInGround(pollo)) {
+    if (isInGround(pollo) || pollo.userData.resetGravity) {
       pollo.userData.lastElapsed = elapsed;
+      pollo.userData.resetGravity = false;
     } else {
       pollo.userData.acceleration = new THREE.Vector3(0,-1,0);
     }
@@ -164,7 +166,7 @@ function movePollo() {
     position.addVectors(velocity,acceleration);
     pollo.translateOnAxis(position, 1);
     if (!canMove(pollo)) {
-      pollo.userData.lastElapsed = elapsed;
+      pollo.userData.resetGravity = true;
       pollo.translateOnAxis(position, -1);
     }
     polloHelper.update();
