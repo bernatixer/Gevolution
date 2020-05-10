@@ -89,14 +89,15 @@ function init() {
       let noise = simplex.noise2D(32/150, 32/150);
       noise = Math.floor(noise*cellSize/2 + cellSize/2);
       root.position.x = 32;
-      root.position.y = noise+1+height + 25;
+      root.position.y = noise+1+height + 20;
       root.position.z = 32;
       root.rotation.y = -Math.PI / 2;
       scene.add(root);
       pollo = root;
 
-      pollo.userData.velocity = 1;
-      // pollo.userData.direction = new THREE.Vector3(0,-1,0);
+      pollo.userData.velocity = new THREE.Vector3(0,0,-5);
+      pollo.userData.acceleration = new THREE.Vector3(0,-1,0);
+      pollo.userData.lastElapsed = clock.elapsedTime;
       polloHelper = new THREE.BoxHelper(pollo);
       scene.add(polloHelper);
     });
@@ -147,25 +148,26 @@ function animate() {
 
 function movePollo() {
   const delta = clock.getDelta();
-  const gravity = new THREE.Vector3(0,-9.81,);
-  const elapsed = clock.elapsedTime;
-  
+  const elapsed = clock.getElapsedTime();
   if (pollo) {
-    const velocity = pollo.userData.velocity;
-    polloHelper.update();
-    // Nomes s'aplica si esta a l'aire
-    let gravity = new THREE.Vector3(0,-1,0);
-    if (!isInGround(pollo)) {
-      gravity.multiplyScalar(0.5); // Falta acceleracio
+    if (isInGround(pollo)) {
+      pollo.userData.lastElapsed = elapsed;
     } else {
-      gravity.multiplyScalar(0);
+      pollo.userData.acceleration = new THREE.Vector3(0,-1,0);
     }
-    const direction = new THREE.Vector3(0,0,-1).multiplyScalar(0.33);
-    direction.add(gravity);
-    pollo.translateOnAxis(direction, 1);
+    const velocity = pollo.userData.velocity.clone();
+    velocity.multiplyScalar(delta);
+    const elapsedTime = elapsed - pollo.userData.lastElapsed;
+    const acceleration = pollo.userData.acceleration.clone();
+    acceleration.multiplyScalar(0.981*((elapsedTime)**2)/2);
+    const position = new THREE.Vector3();
+    position.addVectors(velocity,acceleration);
+    pollo.translateOnAxis(position, 1);
     if (!canMove(pollo)) {
-      pollo.translateOnAxis(direction, -1);
+      pollo.userData.lastElapsed = elapsed;
+      pollo.translateOnAxis(position, -1);
     }
+    polloHelper.update();
   }
 }
 
@@ -185,8 +187,6 @@ function isInGround(entity) {
   let inGround = false;
   const vertices = getLowerVertices(entity);
   vertices.forEach(vertex => {
-    // console.log(vertex);
-    // console.log(world.getVoxel(...vertex));
     if (world.getVoxel(...vertex)) {
       inGround = true;
       return;
@@ -195,8 +195,8 @@ function isInGround(entity) {
   return inGround;
 }
 
-function getBoxVertices(objext) {
-  const box = new THREE.Box3().setFromObject(objext);
+function getBoxVertices(object) {
+  const box = new THREE.Box3().setFromObject(object);
   return [
     [ Math.floor(box.min.x), Math.floor(box.min.y), Math.floor(box.min.z) ],
     [ Math.floor(box.min.x), Math.floor(box.min.y), Math.floor(box.max.z) ],
@@ -209,13 +209,13 @@ function getBoxVertices(objext) {
   ];
 }
 
-function getLowerVertices(objext) {
-  const box = new THREE.Box3().setFromObject(objext);
+function getLowerVertices(object) {
+  const box = new THREE.Box3().setFromObject(object);
   return [
-    [ Math.floor(box.min.x), Math.floor(box.min.y)-1, Math.floor(box.min.z) ],
-    [ Math.floor(box.min.x), Math.floor(box.min.y)-1, Math.floor(box.max.z) ],
-    [ Math.floor(box.max.x), Math.floor(box.min.y)-1, Math.floor(box.min.z) ],
-    [ Math.floor(box.max.x), Math.floor(box.min.y)-1, Math.floor(box.max.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.min.y-0.15), Math.floor(box.min.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.min.y-0.15), Math.floor(box.max.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y-0.15), Math.floor(box.min.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y-0.15), Math.floor(box.max.z) ],
   ];
 }
 
