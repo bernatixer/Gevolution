@@ -100,12 +100,10 @@ function init() {
       root.position.y = noise+1+height + 20;
       root.position.z = 32;
       root.rotation.y = -Math.PI / 2;
-      scene.add(root);
-      
-      //pollo = root;
       root.userData.velocity = new THREE.Vector3();
       root.userData.direction = new THREE.Vector3();
-      entities.push(root)
+      entities.push(root);
+      scene.add(root);
       // polloHelper = new THREE.BoxHelper(pollo);
       // scene.add(polloHelper);
     });
@@ -164,12 +162,13 @@ function moveEntity(entity) {
     entity.userData.velocity.x -= entity.userData.velocity.x * 20.0 * delta;
     entity.userData.velocity.z -= entity.userData.velocity.z * 20.0 * delta;
 
-    entity.userData.direction.z = Number( moveForward ) - Number( moveBackward );
-    entity.userData.direction.x = Number( moveRight ) - Number( moveLeft );
-    entity.userData.direction.normalize();
+    // entity.userData.direction.z = Number( moveForward ) - Number( moveBackward );
+    // entity.userData.direction.x = Number( moveRight ) - Number( moveLeft );
+    // entity.userData.direction.normalize();
 
-    if ( moveForward || moveBackward ) entity.userData.velocity.z -= entity.userData.direction.z * 400.0 * delta;
-    if ( moveLeft || moveRight ) entity.userData.velocity.x -= entity.userData.direction.x * 400.0 * delta;
+    // if ( moveForward || moveBackward ) entity.userData.velocity.z -= entity.userData.direction.z * 400.0 * delta;
+    // if ( moveLeft || moveRight ) entity.userData.velocity.x -= entity.userData.direction.x * 400.0 * delta;
+    if ( moveForward ) entity.userData.velocity.z -= 400.0 * delta;
 
     if (!isInGround(entity)) {
       entity.userData.velocity.y -= 9.81 * 15 * delta; // 15 = mass
@@ -256,8 +255,8 @@ var onKeyDown = function ( event ) {
   switch ( event.keyCode ) {
     
     case 37: // left
-    entities[selectedEntity].rotateY(Math.PI / 32);
-    break;
+      entities[selectedEntity].rotateY(Math.PI / 32);
+      break;
 
     case 39: // right
       entities[selectedEntity].rotateY(-Math.PI / 32);
