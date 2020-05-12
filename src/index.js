@@ -20,6 +20,12 @@ var clock = new THREE.Clock();
 var world;
 var pollo, polloHelper;
 
+var moveForward = false;
+var moveBackward = false;
+var moveLeft = false;
+var moveRight = false;
+var canJump = false;
+
 init()
 animate();
 
@@ -95,10 +101,8 @@ function init() {
       scene.add(root);
       pollo = root;
 
-      pollo.userData.velocity = new THREE.Vector3(0,0,-5);
-      pollo.userData.acceleration = new THREE.Vector3(0,-1,0);
-      pollo.userData.lastElapsed = clock.elapsedTime;
-      pollo.userData.resetGravity = false;
+      pollo.userData.velocity = new THREE.Vector3();
+      pollo.userData.direction = new THREE.Vector3();
       polloHelper = new THREE.BoxHelper(pollo);
       scene.add(polloHelper);
     });
@@ -149,26 +153,48 @@ function animate() {
 
 function movePollo() {
   const delta = clock.getDelta();
-  const elapsed = clock.getElapsedTime();
+
   if (pollo) {
-    if (isInGround(pollo) || pollo.userData.resetGravity) {
-      pollo.userData.lastElapsed = elapsed;
-      pollo.userData.resetGravity = false;
+    pollo.userData.velocity.x -= pollo.userData.velocity.x * 20.0 * delta;
+    pollo.userData.velocity.z -= pollo.userData.velocity.z * 20.0 * delta;
+
+    pollo.userData.direction.z = Number( moveForward ) - Number( moveBackward );
+    pollo.userData.direction.x = Number( moveRight ) - Number( moveLeft );
+    pollo.userData.direction.normalize();
+
+    if ( moveForward || moveBackward ) pollo.userData.velocity.z -= pollo.userData.direction.z * 400.0 * delta;
+    if ( moveLeft || moveRight ) pollo.userData.velocity.x -= pollo.userData.direction.x * 400.0 * delta;
+
+    if (!isInGround(pollo)) {
+      pollo.userData.velocity.y -= 9.8 * 15 * delta; // 15 = mass
+      canJump = false;
     } else {
-      pollo.userData.acceleration = new THREE.Vector3(0,-1,0);
+      canJump = true;
     }
-    const velocity = pollo.userData.velocity.clone();
-    velocity.multiplyScalar(delta);
-    const elapsedTime = elapsed - pollo.userData.lastElapsed;
-    const acceleration = pollo.userData.acceleration.clone();
-    acceleration.multiplyScalar(0.981*((elapsedTime)**2)/2);
-    const position = new THREE.Vector3();
-    position.addVectors(velocity,acceleration);
-    pollo.translateOnAxis(position, 1);
+
+    pollo.translateX(-pollo.userData.velocity.x * delta, 1);
+    pollo.translateZ(pollo.userData.velocity.z * delta, 1);
+    pollo.translateY(pollo.userData.velocity.y * delta, 1);
+    
     if (!canMove(pollo)) {
-      pollo.userData.resetGravity = true;
-      pollo.translateOnAxis(position, -1);
+      // Intentem moure en eix Z-Y
+      pollo.translateX(pollo.userData.velocity.x * delta, 1);
+      pollo.userData.velocity.x = 0;
+
+      // Intentem moure en eix Y
+      if (!canMove(pollo)) {
+        pollo.translateZ(-pollo.userData.velocity.z * delta, 1);
+        pollo.userData.velocity.z = 0;
+
+        // No es pot moure
+        if (!canMove(pollo)) {
+          pollo.translateY(-pollo.userData.velocity.y * delta, 1);
+          pollo.userData.velocity.y = Math.max( 0, pollo.userData.velocity.y );
+        }
+      }
     }
+
+    // pollo.translateY( pollo.userData.velocity.y * delta, 1 );
     polloHelper.update();
   }
 }
@@ -214,12 +240,69 @@ function getBoxVertices(object) {
 function getLowerVertices(object) {
   const box = new THREE.Box3().setFromObject(object);
   return [
-    [ Math.floor(box.min.x), Math.floor(box.min.y-0.15), Math.floor(box.min.z) ],
-    [ Math.floor(box.min.x), Math.floor(box.min.y-0.15), Math.floor(box.max.z) ],
-    [ Math.floor(box.max.x), Math.floor(box.min.y-0.15), Math.floor(box.min.z) ],
-    [ Math.floor(box.max.x), Math.floor(box.min.y-0.15), Math.floor(box.max.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.min.y-0.1), Math.floor(box.min.z) ],
+    [ Math.floor(box.min.x), Math.floor(box.min.y-0.1), Math.floor(box.max.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y-0.1), Math.floor(box.min.z) ],
+    [ Math.floor(box.max.x), Math.floor(box.min.y-0.1), Math.floor(box.max.z) ],
   ];
 }
+
+var onKeyDown = function ( event ) {
+  switch ( event.keyCode ) {
+    case 38: // up
+    case 87: // w
+      moveForward = true;
+      break;
+
+    case 37: // left
+    case 65: // a
+      moveLeft = true;
+      break;
+
+    case 40: // down
+    case 83: // s
+      moveBackward = true;
+      break;
+
+    case 39: // right
+    case 68: // d
+      moveRight = true;
+      break;
+
+    case 32: // space
+      if ( canJump === true ) pollo.userData.velocity.y += 20;
+      canJump = false;
+      break;
+
+  }
+};
+
+var onKeyUp = function ( event ) {
+  switch ( event.keyCode ) {
+    case 38: // up
+    case 87: // w
+      moveForward = false;
+      break;
+
+    case 37: // left
+    case 65: // a
+      moveLeft = false;
+      break;
+
+    case 40: // down
+    case 83: // s
+      moveBackward = false;
+      break;
+
+    case 39: // right
+    case 68: // d
+      moveRight = false;
+      break;
+  }
+};
+
+document.addEventListener( 'keydown', onKeyDown, false );
+document.addEventListener( 'keyup', onKeyUp, false );
 
 function render() {
     stats.update();
