@@ -8,6 +8,8 @@ import { createWebGLRenderer } from './components/webGLRenderer'
 import VoxelWorld from './components/voxelWorld'
 import SimplexNoise from 'simplex-noise';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
+import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
+import {MTLLoader} from 'three/examples/jsm/loaders/MTLLoader.js';
 import lights from './components/lights'
 
 var camera, scene, controls;
@@ -77,9 +79,41 @@ function init() {
       }
     }
     
+    var mtlLoader = new MTLLoader();
+    mtlLoader.load('/assets/pollito.obj.mtl', function( materials ) {
+    
+        materials.preload();
+        var objLoader = new OBJLoader();
+        objLoader.setMaterials( materials );
+        objLoader.load('/assets/pollito.obj', (object) => {
+          
+          let height = 0;
+          object.traverse( function ( child ) {
+            if ( child instanceof THREE.Mesh ) {
+              child.geometry.center();
+              child.geometry.computeBoundingBox();
+              const maxY = child.geometry.boundingBox.max.y;
+              const minY = child.geometry.boundingBox.min.y;
+              height = (maxY-minY)*5;
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          } );
+          // object.rotation.x = -Math.PI / 2;
+          object.scale.set(0.1,0.1,0.1);
+          object.position.x = 40;
+          object.position.y = 40;
+          object.position.z = 40;
+          object.userData.velocity = new THREE.Vector3();
+          object.userData.direction = new THREE.Vector3();
+          entities.push(object);
+          scene.add( object );
+          },
+        );
+    });
+
     const gltfLoader = new GLTFLoader();
-    const url = '/assets/model.gltf';
-    gltfLoader.load(url, (gltf) => {
+    gltfLoader.load('/assets/model.gltf', (gltf) => {
       const root = gltf.scene;
       let height = 0;
       root.traverse(function ( child ) {
@@ -148,16 +182,15 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
+    const delta = clock.getDelta();
     for (let i=0; i<entities.length; ++i) {
-      moveEntity(entities[0]);
+      moveEntity(entities[i], delta);
     }
     controls.update();
     render();
 }
 
-function moveEntity(entity) {
-  const delta = clock.getDelta();
-  
+function moveEntity(entity, delta) {
   if (entity) {
     entity.userData.velocity.x -= entity.userData.velocity.x * 20.0 * delta;
     entity.userData.velocity.z -= entity.userData.velocity.z * 20.0 * delta;
@@ -171,29 +204,29 @@ function moveEntity(entity) {
     if ( moveForward ) entity.userData.velocity.z -= 400.0 * delta;
 
     if (!isInGround(entity)) {
-      entity.userData.velocity.y -= 9.81 * 15 * delta; // 15 = mass
+      entity.userData.velocity.y -= 9.81 * 10 * delta; // 10 = mass
       canJump = false;
     } else {
       canJump = true;
     }
 
-    entity.translateX(-entity.userData.velocity.x * delta, 1);
-    entity.translateZ(entity.userData.velocity.z * delta, 1);
-    entity.translateY(entity.userData.velocity.y * delta, 1);
+    entity.translateX(-entity.userData.velocity.x * delta);
+    entity.translateZ(entity.userData.velocity.z * delta);
+    entity.translateY(entity.userData.velocity.y * delta);
     
     if (!canMove(entity)) {
       // Intentem moure en eix Z-Y
-      entity.translateX(entity.userData.velocity.x * delta, 1);
+      entity.translateX(entity.userData.velocity.x * delta);
       entity.userData.velocity.x = 0;
 
       // Intentem moure en eix Y
       if (!canMove(entity)) {
-        entity.translateZ(-entity.userData.velocity.z * delta, 1);
+        entity.translateZ(-entity.userData.velocity.z * delta);
         entity.userData.velocity.z = 0;
 
         // No es pot moure
         if (!canMove(entity)) {
-          entity.translateY(-entity.userData.velocity.y * delta, 1);
+          entity.translateY(-entity.userData.velocity.y * delta);
           entity.userData.velocity.y = Math.max( 0, entity.userData.velocity.y );
         }
       }
