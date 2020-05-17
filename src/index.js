@@ -3,7 +3,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { createCamera } from './components/camera'
 import { createScene } from './components/scene'
-import { createHelpers } from './components/helpers'
 import { createWebGLRenderer } from './components/webGLRenderer'
 import VoxelWorld from './components/voxelWorld'
 import SimplexNoise from 'simplex-noise';
@@ -22,7 +21,7 @@ var clock = new THREE.Clock();
 var world;
 var polloHelper;
 var entities = [];
-var selectedEntity = 0;
+var selectedEntity = 1;
 
 var moveForward = false;
 var moveBackward = false;
@@ -43,9 +42,8 @@ function init() {
     container.appendChild(stats.dom);
     stats.dom.style.position = 'absolute';
 
-    // var [axes, gridXZ] = createHelpers()
-    // scene.add(axes);
-    // scene.add(gridXZ);
+    // scene.add(new THREE.AxesHelper(4));
+    // scene.add(new THREE.GridHelper(32*2, 32*2));
     
     lights.addAmbientLight(scene);
     lights.addDirectionalLight(scene);
@@ -99,7 +97,7 @@ function init() {
               child.receiveShadow = true;
             }
           } );
-          // object.rotation.x = -Math.PI / 2;
+          object.rotation.x += -Math.PI / 2;
           object.scale.set(0.1,0.1,0.1);
           object.position.x = 40;
           object.position.y = 40;
@@ -107,7 +105,7 @@ function init() {
           object.userData.velocity = new THREE.Vector3();
           object.userData.direction = new THREE.Vector3();
           entities.push(object);
-          scene.add( object );
+          scene.add(object);
           },
         );
     });
@@ -204,7 +202,7 @@ function moveEntity(entity, delta) {
     if ( moveForward ) entity.userData.velocity.z -= 400.0 * delta;
 
     if (!isInGround(entity)) {
-      entity.userData.velocity.y -= 9.81 * 10 * delta; // 10 = mass
+      entity.userData.velocity.y -= 9.81 * 5 * delta; // 10 = mass
       canJump = false;
     } else {
       canJump = true;
@@ -212,7 +210,16 @@ function moveEntity(entity, delta) {
 
     entity.translateX(-entity.userData.velocity.x * delta);
     entity.translateZ(entity.userData.velocity.z * delta);
-    entity.translateY(entity.userData.velocity.y * delta);
+    // entity.translateY(entity.userData.velocity.y * delta);
+    let translated = new THREE.Vector3(0,0,0);
+    entity.getWorldDirection(translated);
+    let defaultGravity;
+    if (translated.y) {
+      defaultGravity = translated.add(new THREE.Vector3(0,-1,1));
+    } else {
+      defaultGravity = new THREE.Vector3(0,1,0);
+    }
+    entity.translateOnAxis(defaultGravity, entity.userData.velocity.y * delta)
     
     if (!canMove(entity)) {
       // Intentem moure en eix Z-Y
