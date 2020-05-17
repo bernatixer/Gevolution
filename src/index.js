@@ -10,6 +10,7 @@ import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
 import {MTLLoader} from 'three/examples/jsm/loaders/MTLLoader.js';
 import lights from './components/lights'
+import {AmmoPhysics, PhysicsLoader} from '@enable3d/ammo-physics'
 
 var camera, scene, controls;
 var webglRenderer;
@@ -29,14 +30,20 @@ var moveLeft = false;
 var moveRight = false;
 var canJump = false;
 
-init()
-animate();
+let physics;
+
+PhysicsLoader('/assets/lib', () => {
+  init()
+  animate();
+})
 
 function init() {
     container = document.createElement('div');
     document.body.appendChild(container);
 
     scene = createScene();
+    physics = new AmmoPhysics(scene, { gravity: { x: 0, y: -20, z: 0 }});
+    // physics.debug.enable(true)
 
     stats = new Stats();
     container.appendChild(stats.dom);
@@ -76,7 +83,7 @@ function init() {
         drawCell(world, x,0,z);
       }
     }
-    
+
     var mtlLoader = new MTLLoader();
     mtlLoader.load('/assets/pollito.obj.mtl', function( materials ) {
     
@@ -100,12 +107,14 @@ function init() {
           object.rotation.x += -Math.PI / 2;
           object.scale.set(0.1,0.1,0.1);
           object.position.x = 40;
-          object.position.y = 40;
+          object.position.y = 35;
           object.position.z = 40;
           object.userData.velocity = new THREE.Vector3();
           object.userData.direction = new THREE.Vector3();
           entities.push(object);
           scene.add(object);
+          physics.add.existing(object, { mass: 4, collisionFlags: 0 })
+          object.body.setAngularFactor(0,0,0);
           },
         );
     });
@@ -136,6 +145,9 @@ function init() {
       root.userData.direction = new THREE.Vector3();
       entities.push(root);
       scene.add(root);
+      physics.add.existing(root, { mass: 2, collisionFlags: 0 })
+      root.body.setAngularFactor(0,0,0);
+      root.body.setFriction(0.05)
       // polloHelper = new THREE.BoxHelper(pollo);
       // scene.add(polloHelper);
     });
@@ -170,6 +182,8 @@ function drawCell(world, x, y, z) {
   mesh.receiveShadow = true;
   mesh.castShadow = true;
   scene.add(mesh);
+  physics.add.existing(mesh, { shape: 'concaveMesh' });
+  mesh.body.setCollisionFlags(2);
 }
 
 function onWindowResize() {
@@ -179,11 +193,13 @@ function onWindowResize() {
 }
 
 function animate() {
+    physics.update(clock.getDelta() * 1000);
+    // physics.updateDebugger();
     requestAnimationFrame(animate);
-    const delta = clock.getDelta();
+    /*const delta = clock.getDelta();
     for (let i=0; i<entities.length; ++i) {
       moveEntity(entities[i], delta);
-    }
+    }*/
     controls.update();
     render();
 }
@@ -210,8 +226,8 @@ function moveEntity(entity, delta) {
 
     entity.translateX(-entity.userData.velocity.x * delta);
     entity.translateZ(entity.userData.velocity.z * delta);
-    // entity.translateY(entity.userData.velocity.y * delta);
-    let translated = new THREE.Vector3(0,0,0);
+    entity.translateY(entity.userData.velocity.y * delta);
+    /*let translated = new THREE.Vector3(0,0,0);
     entity.getWorldDirection(translated);
     let defaultGravity;
     if (translated.y) {
@@ -219,7 +235,7 @@ function moveEntity(entity, delta) {
     } else {
       defaultGravity = new THREE.Vector3(0,1,0);
     }
-    entity.translateOnAxis(defaultGravity, entity.userData.velocity.y * delta)
+    entity.translateOnAxis(defaultGravity, entity.userData.velocity.y * delta)*/
     
     if (!canMove(entity)) {
       // Intentem moure en eix Z-Y
@@ -304,6 +320,7 @@ var onKeyDown = function ( event ) {
 
     case 87: // w
       moveForward = true;
+      entities[1].body.applyForceX(5);
       break;
 
     case 65: // a
@@ -323,6 +340,7 @@ var onKeyDown = function ( event ) {
         entities[selectedEntity].userData.velocity.y += 20;
       }
       canJump = false;
+      entities[1].body.applyForceY(20);
       break;
 
   }

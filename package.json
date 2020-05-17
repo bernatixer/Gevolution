@@ -46,6 +46,7 @@
     "webpack-merge": "^4.2.2"
   },
   "dependencies": {
+    "@enable3d/ammo-physics": "^0.17.0",
     "noisejs": "^2.1.0",
     "simplex-noise": "^2.4.0",
     "stats-js": "^1.0.1",
