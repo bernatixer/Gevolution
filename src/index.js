@@ -10,7 +10,8 @@ import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
 import {MTLLoader} from 'three/examples/jsm/loaders/MTLLoader.js';
 import lights from './components/lights'
-import {AmmoPhysics, PhysicsLoader} from '@enable3d/ammo-physics'
+import {AmmoPhysics, PhysicsLoader} from '@enable3d/ammo-physics';
+import * as NEAT from 'neataptic';
 
 var camera, scene, controls;
 var webglRenderer;
@@ -30,12 +31,50 @@ var moveLeft = false;
 var moveRight = false;
 var canJump = false;
 
+var isColliding = false;
+
 let physics;
 
 PhysicsLoader('/assets/lib', () => {
   init()
   animate();
 })
+
+var network = new NEAT.architect.Perceptron(2, 2, 1);
+
+var trainingSet = [
+  { input: [0,-1], output: [0] },
+  { input: [0,-1.5], output: [0] },
+  { input: [0,-2.5], output: [0] },
+  { input: [0,0], output: [0] },
+  { input: [0,0.1], output: [0] },
+  { input: [0,0.2], output: [0] },
+  { input: [0,0.3], output: [0] },
+  { input: [0,0.4], output: [0] },
+  { input: [0,0.5], output: [0] },
+  { input: [0,1.1], output: [0] },
+  { input: [0,1.2], output: [0] },
+  { input: [0,1.3], output: [0] },
+  { input: [0,1.4], output: [0] },
+  { input: [0,1.5], output: [0] },
+  { input: [1,0], output: [1] },
+  { input: [1,0.1], output: [1] },
+  { input: [1,0.11], output: [1] },
+
+  { input: [0,1], output: [0] },
+  { input: [1,1], output: [0] },
+
+  { input: [0,2], output: [0] },
+
+  { input: [0,3], output: [0] },
+  { input: [0,4], output: [0] },
+  { input: [0,5], output: [0] },
+];
+network.train(trainingSet, {
+  error: 0.01
+});
+
+// console.log(network.activate([0,0.2467564]))
 
 function init() {
     container = document.createElement('div');
@@ -150,6 +189,11 @@ function init() {
       root.body.setFriction(0.05)
       // polloHelper = new THREE.BoxHelper(pollo);
       // scene.add(polloHelper);
+      root.body.on.collision( function(otherObject, event) {
+        if (otherObject.name !== 'ground') {
+          isColliding = true;
+        }
+      })
     });
 
     webglRenderer = createWebGLRenderer();
@@ -193,15 +237,25 @@ function onWindowResize() {
 }
 
 function animate() {
-    physics.update(clock.getDelta() * 1000);
-    // physics.updateDebugger();
-    requestAnimationFrame(animate);
-    /*const delta = clock.getDelta();
-    for (let i=0; i<entities.length; ++i) {
-      moveEntity(entities[i], delta);
-    }*/
-    controls.update();
-    render();
+  for (let i=0; i<entities.length; ++i) {
+    jump(entities[i])
+  }
+  isColliding = false;
+  physics.update(clock.getDelta() * 1000);
+  // physics.updateDebugger();
+  requestAnimationFrame(animate);
+  /*const delta = clock.getDelta();
+  for (let i=0; i<entities.length; ++i) {
+    moveEntity(entities[i], delta);
+  }*/
+  controls.update();
+  render();
+}
+
+function jump(entity) {
+  const velocity = entity.body.velocity.y;
+  const jump = network.activate([isColliding ? 1 : 0,velocity])[0];
+  if (jump > 0.90) entity.body.applyForceY(20);
 }
 
 function moveEntity(entity, delta) {
