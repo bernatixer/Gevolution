@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import SimplexNoise from 'simplex-noise';
-import TerrainEngine from './terrainEngine';
+import VoxelEngine from './voxelEngine';
 
 export default class Terrain {
     constructor() {
         this.cellSize = 32;
         this.mapWidth = 5*this.cellSize;
-        this.engine = new TerrainEngine(this.cellSize);
+        this.engine = new VoxelEngine(this.cellSize);
         this.simplex = new SimplexNoise('seed');
     }
 

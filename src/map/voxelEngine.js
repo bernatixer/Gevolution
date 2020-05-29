@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export default class TerrainEngine {
+export default class VoxelEngine {
   constructor(cellSize) {
     this.cellSize = cellSize;
     this.cellSliceSize = cellSize * cellSize;
