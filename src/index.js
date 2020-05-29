@@ -4,14 +4,15 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { createCamera } from './components/camera'
 import { createScene } from './components/scene'
 import { createWebGLRenderer } from './components/webGLRenderer'
-import VoxelWorld from './components/voxelWorld'
-import SimplexNoise from 'simplex-noise';
+import VoxelWorld from './map/voxelWorld'
+import * as TERRAIN from './map/terrain'
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
 import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
 import {MTLLoader} from 'three/examples/jsm/loaders/MTLLoader.js';
 import lights from './components/lights'
 import {AmmoPhysics, PhysicsLoader} from '@enable3d/ammo-physics';
 import * as NEAT from 'neataptic';
+import SimplexNoise from 'simplex-noise';
 
 var camera, scene, controls;
 var webglRenderer;
@@ -97,32 +98,13 @@ function init() {
     const cellSize = 32;
     const mapWidth = 5*cellSize;
     camera = createCamera(mapWidth);
+
+    
     world = new VoxelWorld(cellSize);
+    TERRAIN.generateTerrain(world);
+    TERRAIN.drawTerrain(scene, physics, world);
+    
     const simplex = new SimplexNoise('seed');
-
-    for (let y = 0; y < cellSize; ++y) {
-      for (let z = 0; z < mapWidth; ++z) {
-        for (let x = 0; x < mapWidth; ++x) {
-          const height = simplex.noise2D(x/150, z/150);
-          height = Math.floor(height*cellSize/2 + cellSize/2);
-          if (height < 7) height = 7;
-          if (y <= height) {
-            let color = 1;
-            if (height <= 7) {
-              color = 2;
-            }
-            world.setVoxel(x, y, z, color);
-          }
-        }
-      }
-    }
-
-    for (let x = 0; x < mapWidth/cellSize; ++x) {
-      for (let z = 0; z < mapWidth/cellSize; ++z) {
-        drawCell(world, x,0,z);
-      }
-    }
-
     var mtlLoader = new MTLLoader();
     mtlLoader.load('/assets/pollito.obj.mtl', function( materials ) {
     
@@ -205,31 +187,6 @@ function init() {
     controls.update();
 }
 
-function drawCell(world, x, y, z) {
-  const {positions, normals, colors, indices} = world.generateGeometryDataForCell(x, y, z);
-  const geometry = new THREE.BufferGeometry();
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
-
-  const positionNumComponents = 3;
-  const normalNumComponents = 3;
-  geometry.setAttribute(
-      'position',
-      new THREE.BufferAttribute(new Float32Array(positions), positionNumComponents));
-  geometry.setAttribute(
-      'normal',
-      new THREE.BufferAttribute(new Float32Array(normals), normalNumComponents));
-  geometry.setAttribute(
-      'color',
-      new THREE.BufferAttribute(new Float32Array(colors), 3));
-  geometry.setIndex(indices);
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.receiveShadow = true;
-  mesh.castShadow = true;
-  scene.add(mesh);
-  physics.add.existing(mesh, { shape: 'concaveMesh' });
-  mesh.body.setCollisionFlags(2);
-}
-
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -254,7 +211,7 @@ function animate() {
 
 function jump(entity) {
   const velocity = entity.body.velocity.y;
-  const jump = network.activate([isColliding ? 1 : 0,velocity])[0];
+  const jump = network.activate([isColliding ? 1 : 0, velocity])[0];
   if (jump > 0.90) entity.body.applyForceY(20);
 }
 
