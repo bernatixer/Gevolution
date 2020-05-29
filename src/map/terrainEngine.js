@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 
-export default class VoxelWorld {
+export default class TerrainEngine {
   constructor(cellSize) {
     this.cellSize = cellSize;
     this.cellSliceSize = cellSize * cellSize;
     this.cells = {};
   }
-  VoxelWorld_faces = [
+
+  cube_faces = [
     { // left
       dir: [ -1,  0,  0, ],
       corners: [
@@ -62,6 +63,7 @@ export default class VoxelWorld {
       ],
     },
   ];
+
   computeCellId(x, y, z) {
     const {cellSize} = this;
     const cellX = Math.floor(x / cellSize);
@@ -69,6 +71,7 @@ export default class VoxelWorld {
     const cellZ = Math.floor(z / cellSize);
     return `${cellX},${cellY},${cellZ}`;
   }
+
   computeVoxelOffset(x, y, z) {
     const {cellSize, cellSliceSize} = this;
     const voxelX = THREE.MathUtils.euclideanModulo(x, cellSize) | 0;
@@ -78,9 +81,11 @@ export default class VoxelWorld {
            voxelZ * cellSize +
            voxelX;
   }
+
   getCellForVoxel(x, y, z) {
     return this.cells[this.computeCellId(x, y, z)];
   }
+
   setVoxel(x, y, z, v) {
     let cell = this.getCellForVoxel(x, y, z);
     if (!cell) {
@@ -89,6 +94,7 @@ export default class VoxelWorld {
     const voxelOffset = this.computeVoxelOffset(x, y, z);
     cell[voxelOffset] = v;
   }
+
   addCellForVoxel(x, y, z) {
     const cellId = this.computeCellId(x, y, z);
     let cell = this.cells[cellId];
@@ -99,6 +105,7 @@ export default class VoxelWorld {
     }
     return cell;
   }
+
   getVoxel(x, y, z) {
     const cell = this.getCellForVoxel(x, y, z);
     if (!cell) {
@@ -107,6 +114,7 @@ export default class VoxelWorld {
     const voxelOffset = this.computeVoxelOffset(x, y, z);
     return cell[voxelOffset];
   }
+
   generateGeometryDataForCell(cellX, cellY, cellZ) {
     const {cellSize} = this;
     const positions = [];
@@ -126,7 +134,7 @@ export default class VoxelWorld {
           const voxel = this.getVoxel(voxelX, voxelY, voxelZ);
           if (voxel) {
             // There is a voxel here but do we need faces for it?
-            for (const {dir, corners} of this.VoxelWorld_faces) {
+            for (const {dir, corners} of this.cube_faces) {
               const neighbor = this.getVoxel(
                   voxelX + dir[0],
                   voxelY + dir[1],

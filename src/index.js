@@ -4,15 +4,14 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 import { createCamera } from './components/camera'
 import { createScene } from './components/scene'
 import { createWebGLRenderer } from './components/webGLRenderer'
-import VoxelWorld from './map/voxelWorld'
-import * as TERRAIN from './map/terrain'
-import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader';
-import {OBJLoader} from 'three/examples/jsm/loaders/OBJLoader.js';
-import {MTLLoader} from 'three/examples/jsm/loaders/MTLLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
+import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
+import { AmmoPhysics, PhysicsLoader } from '@enable3d/ammo-physics';
 import lights from './components/lights'
-import {AmmoPhysics, PhysicsLoader} from '@enable3d/ammo-physics';
+import Terrain from './map/terrain'
 import * as NEAT from 'neataptic';
-import SimplexNoise from 'simplex-noise';
+import { config } from './config'
 
 var camera, scene, controls;
 var webglRenderer;
@@ -95,16 +94,13 @@ function init() {
     lights.addAmbientLight(scene);
     lights.addDirectionalLight(scene);
     
-    const cellSize = 32;
-    const mapWidth = 5*cellSize;
-    camera = createCamera(mapWidth);
+    const terrain = new Terrain();
 
+    camera = createCamera(terrain.mapWidth);
+
+    terrain.generateTerrain();
+    terrain.drawTerrain(scene, physics);
     
-    world = new VoxelWorld(cellSize);
-    TERRAIN.generateTerrain(world);
-    TERRAIN.drawTerrain(scene, physics, world);
-    
-    const simplex = new SimplexNoise('seed');
     var mtlLoader = new MTLLoader();
     mtlLoader.load('/assets/pollito.obj.mtl', function( materials ) {
     
@@ -156,8 +152,8 @@ function init() {
         }
       });
       root.scale.set(10,10,10);
-      let noise = simplex.noise2D(32/150, 32/150);
-      noise = Math.floor(noise*cellSize/2 + cellSize/2);
+      let noise = terrain.simplex.noise2D(32/150, 32/150);
+      noise = Math.floor(noise*terrain.cellSize/2 + terrain.cellSize/2);
       root.position.x = 32;
       root.position.y = noise+1+height + 20;
       root.position.z = 32;
@@ -188,9 +184,9 @@ function init() {
 }
 
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = config.SCREEN_WIDTH / config.SCREEN_HEIGHT;
     camera.updateProjectionMatrix();
-    webglRenderer.setSize(window.innerWidth, window.innerHeight);
+    webglRenderer.setSize(config.SCREEN_WIDTH, config.SCREEN_HEIGHT);
 }
 
 function animate() {
