@@ -56,5 +56,6 @@ export default class Terrain {
         scene.add(mesh);
         physics.add.existing(mesh, { shape: 'concaveMesh' });
         mesh.body.setCollisionFlags(2);
+        mesh.userData.isGround = true;
     }
 }
