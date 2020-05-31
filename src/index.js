@@ -81,7 +81,7 @@ function init() {
           object.userData.direction = new THREE.Vector3();
           // entities.push(object);
           scene.add(object);
-          physics.add.existing(object, { mass: 4, collisionFlags: 0 })
+          physics.add.existing(object, { mass: 1, collisionFlags: 0, shape: 'hacd' })
           object.body.setAngularFactor(0,0,0);
           },
         );

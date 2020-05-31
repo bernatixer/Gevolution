@@ -33,13 +33,12 @@ export default class ChickenEntity {
 
           self.object = root;
           scene.add(root);
-          physics.add.existing(root, { mass: 2, collisionFlags: 0 })
+          physics.add.existing(root, { mass: 2, collisionFlags: 0, shape: 'hacd' })
           
           root.body.setAngularFactor(0,0,0);
           root.body.setFriction(0.05)
           self.ready = true
-          // polloHelper = new THREE.BoxHelper(pollo);
-          // scene.add(polloHelper);
+
           root.body.on.collision(function(otherObject, event) {
             if (otherObject.userData.isGround && event == "end") {
                 self.isColliding = false;
