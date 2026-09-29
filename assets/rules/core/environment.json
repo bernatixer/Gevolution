@@ -3,376 +3,2027 @@
   "package_id": "core.environment",
   "version": "1.0.0",
   "label": "Standard environment: water, heat, vegetation, nutrients",
-  "capabilities": ["core.cells.v1", "core.edges.v1", "sandbox.external_source"],
+  "capabilities": [
+    "core.cells.v1",
+    "core.edges.v1",
+    "sandbox.external_source"
+  ],
   "resources": [
-    { "id": "water", "unit": "kg" },
-    { "id": "nutrient", "unit": "kg" },
-    { "id": "biomass", "unit": "kg" }
+    {
+      "id": "water",
+      "unit": "kg"
+    },
+    {
+      "id": "nutrient",
+      "unit": "kg"
+    },
+    {
+      "id": "biomass",
+      "unit": "kg"
+    }
   ],
   "accounts": [
-    { "id": "external.weather", "resource": "water", "direction": "source", "label": "Prescribed rainfall (open weather boundary)" },
-    { "id": "external.atmosphere", "resource": "water", "direction": "sink", "label": "Evaporation to the untracked atmosphere" },
-    { "id": "external.transpiration", "resource": "water", "direction": "sink", "label": "Water transpired by plants" },
-    { "id": "external.photosynthesis", "resource": "biomass", "direction": "source", "label": "Biomass fixed by plant growth (toy exchange)" },
-    { "id": "external.respiration", "resource": "biomass", "direction": "sink", "label": "Detritus respired by decomposers (toy exchange)" }
+    {
+      "id": "external.weather",
+      "resource": "water",
+      "direction": "source",
+      "label": "Prescribed rainfall (open weather boundary)"
+    },
+    {
+      "id": "external.atmosphere",
+      "resource": "water",
+      "direction": "sink",
+      "label": "Evaporation to the untracked atmosphere"
+    },
+    {
+      "id": "external.transpiration",
+      "resource": "water",
+      "direction": "sink",
+      "label": "Water transpired by plants"
+    },
+    {
+      "id": "external.photosynthesis",
+      "resource": "biomass",
+      "direction": "source",
+      "label": "Biomass fixed by plant growth (toy exchange)"
+    },
+    {
+      "id": "external.respiration",
+      "resource": "biomass",
+      "direction": "sink",
+      "label": "Detritus respired by decomposers (toy exchange)"
+    }
   ],
   "fields": [
-    { "id": "elevation", "unit": "m", "policy": { "kind": "parameter" }, "label": "Terrain elevation" },
-    { "id": "temperature", "unit": "K", "policy": { "kind": "integrated" }, "default": 288.0, "min": 220.0, "max": 340.0, "label": "Surface temperature" },
-    { "id": "surface_water", "unit": "kg", "policy": { "kind": "reservoir", "resource": "water" }, "label": "Surface water" },
-    { "id": "soil_water_capacity", "unit": "kg", "policy": { "kind": "parameter" }, "default": 3000.0, "label": "Soil water capacity" },
-    { "id": "soil_water", "unit": "kg", "policy": { "kind": "reservoir", "resource": "water", "capacity": "soil_water_capacity" }, "label": "Soil water" },
-    { "id": "groundwater", "unit": "kg", "policy": { "kind": "reservoir", "resource": "water" }, "label": "Groundwater" },
-    { "id": "conductance_factor", "unit": "1", "policy": { "kind": "parameter" }, "default": 1.0, "min": 0.0, "max": 1.0, "label": "Surface permeability to flow (0 = impermeable)" },
-    { "id": "vegetation_biomass", "unit": "kg", "policy": { "kind": "reservoir", "resource": "biomass" }, "label": "Vegetation biomass" },
-    { "id": "plant_nutrients", "unit": "kg", "policy": { "kind": "reservoir", "resource": "nutrient" }, "label": "Nutrients in living plants" },
-    { "id": "soil_nutrients", "unit": "kg", "policy": { "kind": "reservoir", "resource": "nutrient" }, "label": "Available soil nutrients" },
-    { "id": "detritus_biomass", "unit": "kg", "policy": { "kind": "reservoir", "resource": "biomass" }, "label": "Dead organic material" },
-    { "id": "detritus_nutrients", "unit": "kg", "policy": { "kind": "reservoir", "resource": "nutrient" }, "label": "Nutrients in detritus" }
+    {
+      "id": "elevation",
+      "unit": "m",
+      "policy": {
+        "kind": "parameter"
+      },
+      "label": "Terrain elevation"
+    },
+    {
+      "id": "temperature",
+      "unit": "K",
+      "policy": {
+        "kind": "integrated"
+      },
+      "default": 288.0,
+      "min": 220.0,
+      "max": 340.0,
+      "label": "Surface temperature"
+    },
+    {
+      "id": "surface_water",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "water"
+      },
+      "label": "Surface water"
+    },
+    {
+      "id": "soil_water_capacity",
+      "unit": "kg",
+      "policy": {
+        "kind": "parameter"
+      },
+      "default": 3000.0,
+      "label": "Soil water capacity"
+    },
+    {
+      "id": "soil_water",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "water",
+        "capacity": "soil_water_capacity"
+      },
+      "label": "Soil water"
+    },
+    {
+      "id": "groundwater",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "water"
+      },
+      "label": "Groundwater"
+    },
+    {
+      "id": "conductance_factor",
+      "unit": "1",
+      "policy": {
+        "kind": "parameter"
+      },
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.0,
+      "label": "Surface permeability to flow (0 = impermeable)"
+    },
+    {
+      "id": "vegetation_biomass",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "biomass"
+      },
+      "label": "Vegetation biomass"
+    },
+    {
+      "id": "plant_nutrients",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "nutrient"
+      },
+      "label": "Nutrients in living plants"
+    },
+    {
+      "id": "soil_nutrients",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "nutrient"
+      },
+      "label": "Available soil nutrients"
+    },
+    {
+      "id": "detritus_biomass",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "biomass"
+      },
+      "label": "Dead organic material"
+    },
+    {
+      "id": "detritus_nutrients",
+      "unit": "kg",
+      "policy": {
+        "kind": "reservoir",
+        "resource": "nutrient"
+      },
+      "label": "Nutrients in detritus"
+    }
   ],
   "forcings": [
-    { "id": "rain_flux", "unit": "kg/(m^2*s)", "quantity": "water", "domain": "cells", "label": "Rainfall mass flux" },
-    { "id": "ambient_temperature", "unit": "K", "domain": "cells", "label": "Ambient air temperature" },
-    { "id": "relative_humidity", "unit": "1", "domain": "uniform", "label": "Relative humidity" }
+    {
+      "id": "rain_flux",
+      "unit": "kg/(m^2*s)",
+      "quantity": "water",
+      "domain": "cells",
+      "label": "Rainfall mass flux"
+    },
+    {
+      "id": "ambient_temperature",
+      "unit": "K",
+      "domain": "cells",
+      "label": "Ambient air temperature"
+    },
+    {
+      "id": "relative_humidity",
+      "unit": "1",
+      "domain": "uniform",
+      "label": "Relative humidity"
+    }
   ],
   "parameters": {
-    "water_density": { "value": 1000.0, "unit": "kg/m^3", "min": 500.0, "max": 2000.0, "label": "Water density (toy constant)" },
-    "reference_temperature": { "value": 288.0, "unit": "K", "min": 250.0, "max": 320.0, "label": "Reference temperature" },
-    "vegetation_half_cover": { "value": 400.0, "unit": "kg", "min": 1.0, "max": 100000.0, "label": "Biomass giving 50% cover" }
+    "water_density": {
+      "value": 1000.0,
+      "unit": "kg/m^3",
+      "min": 500.0,
+      "max": 2000.0,
+      "label": "Water density (toy constant)"
+    },
+    "reference_temperature": {
+      "value": 288.0,
+      "unit": "K",
+      "min": 250.0,
+      "max": 320.0,
+      "label": "Reference temperature"
+    },
+    "vegetation_half_cover": {
+      "value": 400.0,
+      "unit": "kg",
+      "min": 1.0,
+      "max": 100000.0,
+      "label": "Biomass giving 50% cover"
+    }
   },
   "rules": [
     {
       "rule_id": "core.env.rain",
       "label": "Rainfall",
       "template": "rainfall",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "rain_factor": { "value": 1.0, "unit": "1", "min": 0.0, "max": 5.0, "label": "Global rainfall multiplier" }
+        "rain_factor": {
+          "value": 1.0,
+          "unit": "1",
+          "min": 0.0,
+          "max": 5.0,
+          "label": "Global rainfall multiplier"
+        }
       },
       "nodes": [
-        { "id": "flux", "op": "read_forcing", "forcing": "rain_flux" },
-        { "id": "area", "op": "cell_area" },
-        { "id": "factor", "op": "parameter", "name": "rain_factor" },
-        { "id": "per_cell", "op": "mul", "inputs": ["flux", "area"] },
-        { "id": "rate", "op": "mul", "inputs": ["per_cell", "factor"] },
-        { "id": "rain", "op": "external_source", "resource": "water", "account": "external.weather", "to": "surface_water", "rate": "rate" }
+        {
+          "id": "flux",
+          "op": "read_forcing",
+          "forcing": "rain_flux"
+        },
+        {
+          "id": "area",
+          "op": "cell_area"
+        },
+        {
+          "id": "factor",
+          "op": "parameter",
+          "name": "rain_factor"
+        },
+        {
+          "id": "per_cell",
+          "op": "mul",
+          "inputs": [
+            "flux",
+            "area"
+          ]
+        },
+        {
+          "id": "rate",
+          "op": "mul",
+          "inputs": [
+            "per_cell",
+            "factor"
+          ]
+        },
+        {
+          "id": "rain",
+          "op": "external_source",
+          "resource": "water",
+          "account": "external.weather",
+          "to": "surface_water",
+          "rate": "rate"
+        }
       ],
-      "effects": ["rain"]
+      "effects": [
+        "rain"
+      ]
     },
     {
       "rule_id": "core.env.evaporation",
       "label": "Surface evaporation",
       "template": "evaporation",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "k_evap": { "value": 0.0006, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Evaporation coefficient", "stability": { "kind": "first_order" } },
-        "beta": { "value": 0.05, "unit": "1/dK", "min": 0.0, "max": 0.5, "label": "Temperature sensitivity" }
+        "potential_evaporation": {
+          "value": 0.0015,
+          "unit": "kg/(m^2*s)",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Potential evaporation flux at reference conditions"
+        },
+        "wet_film": {
+          "value": 0.005,
+          "unit": "m",
+          "min": 0.0001,
+          "max": 1.0,
+          "label": "Water depth that fully wets a cell"
+        },
+        "beta": {
+          "value": 0.05,
+          "unit": "1/dK",
+          "min": 0.0,
+          "max": 0.5,
+          "label": "Temperature sensitivity"
+        }
       },
       "nodes": [
-        { "id": "water", "op": "read_state", "field": "surface_water" },
-        { "id": "t", "op": "read_state", "field": "temperature" },
-        { "id": "t_ref", "op": "parameter", "name": "reference_temperature" },
-        { "id": "dt", "op": "sub", "inputs": ["t", "t_ref"] },
-        { "id": "beta", "op": "parameter", "name": "beta" },
-        { "id": "bdt", "op": "mul", "inputs": ["beta", "dt"] },
-        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
-        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
-        { "id": "three", "op": "const", "value": 3.0, "unit": "1" },
-        { "id": "tf_raw", "op": "add", "inputs": ["one", "bdt"] },
-        { "id": "temperature_factor", "op": "clamp", "inputs": ["tf_raw", "zero", "three"] },
-        { "id": "rh", "op": "read_forcing", "forcing": "relative_humidity" },
-        { "id": "dry_raw", "op": "sub", "inputs": ["one", "rh"] },
-        { "id": "dryness_factor", "op": "clamp", "inputs": ["dry_raw", "zero", "one"] },
-        { "id": "k", "op": "parameter", "name": "k_evap" },
-        { "id": "kw", "op": "mul", "inputs": ["k", "water"] },
-        { "id": "kwt", "op": "mul", "inputs": ["kw", "temperature_factor"] },
-        { "id": "rate", "op": "mul", "inputs": ["kwt", "dryness_factor"] },
-        { "id": "evaporate", "op": "external_sink", "resource": "water", "from": "surface_water", "account": "external.atmosphere", "rate": "rate" }
+        {
+          "id": "water",
+          "op": "read_state",
+          "field": "surface_water"
+        },
+        {
+          "id": "t",
+          "op": "read_state",
+          "field": "temperature"
+        },
+        {
+          "id": "t_ref",
+          "op": "parameter",
+          "name": "reference_temperature"
+        },
+        {
+          "id": "dt",
+          "op": "sub",
+          "inputs": [
+            "t",
+            "t_ref"
+          ]
+        },
+        {
+          "id": "beta",
+          "op": "parameter",
+          "name": "beta"
+        },
+        {
+          "id": "bdt",
+          "op": "mul",
+          "inputs": [
+            "beta",
+            "dt"
+          ]
+        },
+        {
+          "id": "one",
+          "op": "const",
+          "value": 1.0,
+          "unit": "1"
+        },
+        {
+          "id": "zero",
+          "op": "const",
+          "value": 0.0,
+          "unit": "1"
+        },
+        {
+          "id": "three",
+          "op": "const",
+          "value": 3.0,
+          "unit": "1"
+        },
+        {
+          "id": "tf_raw",
+          "op": "add",
+          "inputs": [
+            "one",
+            "bdt"
+          ]
+        },
+        {
+          "id": "temperature_factor",
+          "op": "clamp",
+          "inputs": [
+            "tf_raw",
+            "zero",
+            "three"
+          ]
+        },
+        {
+          "id": "rh",
+          "op": "read_forcing",
+          "forcing": "relative_humidity"
+        },
+        {
+          "id": "dry_raw",
+          "op": "sub",
+          "inputs": [
+            "one",
+            "rh"
+          ]
+        },
+        {
+          "id": "dryness_factor",
+          "op": "clamp",
+          "inputs": [
+            "dry_raw",
+            "zero",
+            "one"
+          ]
+        },
+        {
+          "id": "rho",
+          "op": "parameter",
+          "name": "water_density"
+        },
+        {
+          "id": "area",
+          "op": "cell_area"
+        },
+        {
+          "id": "film",
+          "op": "parameter",
+          "name": "wet_film"
+        },
+        {
+          "id": "rho_area",
+          "op": "mul",
+          "inputs": [
+            "rho",
+            "area"
+          ]
+        },
+        {
+          "id": "film_mass",
+          "op": "mul",
+          "inputs": [
+            "rho_area",
+            "film"
+          ]
+        },
+        {
+          "id": "wet_raw",
+          "op": "safe_divide",
+          "inputs": [
+            "water",
+            "film_mass",
+            "zero"
+          ]
+        },
+        {
+          "id": "wet",
+          "op": "clamp",
+          "inputs": [
+            "wet_raw",
+            "zero",
+            "one"
+          ]
+        },
+        {
+          "id": "e0",
+          "op": "parameter",
+          "name": "potential_evaporation"
+        },
+        {
+          "id": "e_cell",
+          "op": "mul",
+          "inputs": [
+            "e0",
+            "area"
+          ]
+        },
+        {
+          "id": "e1",
+          "op": "mul",
+          "inputs": [
+            "e_cell",
+            "temperature_factor"
+          ]
+        },
+        {
+          "id": "e2",
+          "op": "mul",
+          "inputs": [
+            "e1",
+            "dryness_factor"
+          ]
+        },
+        {
+          "id": "rate",
+          "op": "mul",
+          "inputs": [
+            "e2",
+            "wet"
+          ]
+        },
+        {
+          "id": "evaporate",
+          "op": "external_sink",
+          "resource": "water",
+          "from": "surface_water",
+          "account": "external.atmosphere",
+          "rate": "rate"
+        }
       ],
-      "effects": ["evaporate"]
+      "effects": [
+        "evaporate"
+      ]
     },
     {
       "rule_id": "core.env.soil_evaporation",
       "label": "Soil evaporation (reduced under vegetation)",
       "template": "evaporation",
-      "domain": { "kind": "cells" },
-      "parameters": {
-        "k_soil_evap": { "value": 0.0002, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Soil evaporation coefficient", "stability": { "kind": "first_order" } },
-        "shade": { "value": 0.7, "unit": "1", "min": 0.0, "max": 1.0, "label": "Shading by full cover" }
+      "domain": {
+        "kind": "cells"
       },
-      "nodes": [
-        { "id": "soil", "op": "read_state", "field": "soil_water" },
-        { "id": "tf", "op": "mul", "inputs": ["core.env.evaporation/temperature_factor", "core.env.evaporation/dryness_factor"] },
-        { "id": "cover", "op": "sub", "inputs": ["core.env.temperature/one", "core.env.temperature/bare"] },
-        { "id": "shade", "op": "parameter", "name": "shade" },
-        { "id": "shaded", "op": "mul", "inputs": ["shade", "cover"] },
-        { "id": "open", "op": "sub", "inputs": ["core.env.temperature/one", "shaded"] },
-        { "id": "k", "op": "parameter", "name": "k_soil_evap" },
-        { "id": "ks", "op": "mul", "inputs": ["k", "soil"] },
-        { "id": "kst", "op": "mul", "inputs": ["ks", "tf"] },
-        { "id": "rate", "op": "mul", "inputs": ["kst", "open"] },
-        { "id": "evaporate", "op": "external_sink", "resource": "water", "from": "soil_water", "account": "external.atmosphere", "rate": "rate" }
-      ],
-      "effects": ["evaporate"]
-    },
-    {
-      "rule_id": "core.env.flow",
-      "label": "Head-driven surface flow",
-      "template": "flow",
-      "domain": { "kind": "edges" },
       "parameters": {
-        "conductance": {
-          "value": 5000.0, "unit": "kg/(m*s)", "min": 0.0, "max": 50000.0, "label": "Hydraulic conductance",
-          "stability": { "kind": "transport", "density_param": "water_density", "limit": 0.5 }
+        "soil_evaporation": {
+          "value": 0.0006,
+          "unit": "kg/(m^2*s)",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Potential soil evaporation flux"
+        },
+        "shade": {
+          "value": 0.7,
+          "unit": "1",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Shading by full cover"
         }
       },
       "nodes": [
-        { "id": "elevation", "op": "read_state", "field": "elevation" },
-        { "id": "water", "op": "read_state", "field": "surface_water" },
-        { "id": "rho", "op": "parameter", "name": "water_density" },
-        { "id": "area", "op": "cell_area" },
-        { "id": "rho_area", "op": "mul", "inputs": ["rho", "area"] },
-        { "id": "zero_m", "op": "const", "value": 0.0, "unit": "m" },
-        { "id": "depth", "op": "safe_divide", "inputs": ["water", "rho_area", "zero_m"] },
-        { "id": "head", "op": "add", "inputs": ["elevation", "depth"] },
-        { "id": "head_from", "op": "edge_from", "inputs": ["head"] },
-        { "id": "head_to", "op": "edge_to", "inputs": ["head"] },
-        { "id": "dh", "op": "sub", "inputs": ["head_from", "head_to"] },
-        { "id": "perm", "op": "read_state", "field": "conductance_factor" },
-        { "id": "perm_from", "op": "edge_from", "inputs": ["perm"] },
-        { "id": "perm_to", "op": "edge_to", "inputs": ["perm"] },
-        { "id": "perm_edge", "op": "min", "inputs": ["perm_from", "perm_to"] },
-        { "id": "c", "op": "parameter", "name": "conductance" },
-        { "id": "c_edge", "op": "mul", "inputs": ["c", "perm_edge"] },
-        { "id": "rate", "op": "mul", "inputs": ["c_edge", "dh"] },
-        { "id": "flow", "op": "edge_transfer", "resource": "water", "field": "surface_water", "rate": "rate" }
+        {
+          "id": "tf",
+          "op": "mul",
+          "inputs": [
+            "core.env.evaporation/temperature_factor",
+            "core.env.evaporation/dryness_factor"
+          ]
+        },
+        {
+          "id": "cover",
+          "op": "sub",
+          "inputs": [
+            "core.env.temperature/one",
+            "core.env.temperature/bare"
+          ]
+        },
+        {
+          "id": "shade",
+          "op": "parameter",
+          "name": "shade"
+        },
+        {
+          "id": "shaded",
+          "op": "mul",
+          "inputs": [
+            "shade",
+            "cover"
+          ]
+        },
+        {
+          "id": "open",
+          "op": "sub",
+          "inputs": [
+            "core.env.temperature/one",
+            "shaded"
+          ]
+        },
+        {
+          "id": "e0",
+          "op": "parameter",
+          "name": "soil_evaporation"
+        },
+        {
+          "id": "area",
+          "op": "cell_area"
+        },
+        {
+          "id": "e_cell",
+          "op": "mul",
+          "inputs": [
+            "e0",
+            "area"
+          ]
+        },
+        {
+          "id": "e1",
+          "op": "mul",
+          "inputs": [
+            "e_cell",
+            "tf"
+          ]
+        },
+        {
+          "id": "e2",
+          "op": "mul",
+          "inputs": [
+            "e1",
+            "open"
+          ]
+        },
+        {
+          "id": "rate",
+          "op": "mul",
+          "inputs": [
+            "e2",
+            "core.env.temperature/moisture"
+          ]
+        },
+        {
+          "id": "evaporate",
+          "op": "external_sink",
+          "resource": "water",
+          "from": "soil_water",
+          "account": "external.atmosphere",
+          "rate": "rate"
+        }
       ],
-      "effects": ["flow"]
+      "effects": [
+        "evaporate"
+      ]
+    },
+    {
+      "rule_id": "core.env.flow",
+      "label": "Head-driven surface flow (sheet flow slowed quadratically below the reference depth)",
+      "template": "flow",
+      "domain": {
+        "kind": "edges"
+      },
+      "parameters": {
+        "conductance": {
+          "value": 5000.0,
+          "unit": "kg/(m*s)",
+          "min": 0.0,
+          "max": 50000.0,
+          "label": "Hydraulic conductance",
+          "stability": {
+            "kind": "transport",
+            "density_param": "water_density",
+            "limit": 0.5
+          }
+        },
+        "reference_depth": {
+          "value": 0.05,
+          "unit": "m",
+          "min": 0.0001,
+          "max": 10.0,
+          "label": "Upwind depth for full conductance"
+        }
+      },
+      "nodes": [
+        {
+          "id": "elevation",
+          "op": "read_state",
+          "field": "elevation"
+        },
+        {
+          "id": "water",
+          "op": "read_state",
+          "field": "surface_water"
+        },
+        {
+          "id": "rho",
+          "op": "parameter",
+          "name": "water_density"
+        },
+        {
+          "id": "area",
+          "op": "cell_area"
+        },
+        {
+          "id": "rho_area",
+          "op": "mul",
+          "inputs": [
+            "rho",
+            "area"
+          ]
+        },
+        {
+          "id": "zero_m",
+          "op": "const",
+          "value": 0.0,
+          "unit": "m"
+        },
+        {
+          "id": "depth",
+          "op": "safe_divide",
+          "inputs": [
+            "water",
+            "rho_area",
+            "zero_m"
+          ]
+        },
+        {
+          "id": "head",
+          "op": "add",
+          "inputs": [
+            "elevation",
+            "depth"
+          ]
+        },
+        {
+          "id": "head_from",
+          "op": "edge_from",
+          "inputs": [
+            "head"
+          ]
+        },
+        {
+          "id": "head_to",
+          "op": "edge_to",
+          "inputs": [
+            "head"
+          ]
+        },
+        {
+          "id": "dh",
+          "op": "sub",
+          "inputs": [
+            "head_from",
+            "head_to"
+          ]
+        },
+        {
+          "id": "perm",
+          "op": "read_state",
+          "field": "conductance_factor"
+        },
+        {
+          "id": "perm_from",
+          "op": "edge_from",
+          "inputs": [
+            "perm"
+          ]
+        },
+        {
+          "id": "perm_to",
+          "op": "edge_to",
+          "inputs": [
+            "perm"
+          ]
+        },
+        {
+          "id": "perm_edge",
+          "op": "min",
+          "inputs": [
+            "perm_from",
+            "perm_to"
+          ]
+        },
+        {
+          "id": "c",
+          "op": "parameter",
+          "name": "conductance"
+        },
+        {
+          "id": "c_edge",
+          "op": "mul",
+          "inputs": [
+            "c",
+            "perm_edge"
+          ]
+        },
+        {
+          "id": "depth_from",
+          "op": "edge_from",
+          "inputs": [
+            "depth"
+          ]
+        },
+        {
+          "id": "depth_to",
+          "op": "edge_to",
+          "inputs": [
+            "depth"
+          ]
+        },
+        {
+          "id": "downhill",
+          "op": "gt",
+          "inputs": [
+            "dh",
+            "zero_m"
+          ]
+        },
+        {
+          "id": "upwind_depth",
+          "op": "select",
+          "inputs": [
+            "downhill",
+            "depth_from",
+            "depth_to"
+          ]
+        },
+        {
+          "id": "ref",
+          "op": "parameter",
+          "name": "reference_depth"
+        },
+        {
+          "id": "zero",
+          "op": "const",
+          "value": 0.0,
+          "unit": "1"
+        },
+        {
+          "id": "one",
+          "op": "const",
+          "value": 1.0,
+          "unit": "1"
+        },
+        {
+          "id": "depth_ratio",
+          "op": "safe_divide",
+          "inputs": [
+            "upwind_depth",
+            "ref",
+            "zero"
+          ]
+        },
+        {
+          "id": "depth_linear",
+          "op": "clamp",
+          "inputs": [
+            "depth_ratio",
+            "zero",
+            "one"
+          ]
+        },
+        {
+          "id": "depth_factor",
+          "op": "mul",
+          "inputs": [
+            "depth_linear",
+            "depth_linear"
+          ]
+        },
+        {
+          "id": "c_depth",
+          "op": "mul",
+          "inputs": [
+            "c_edge",
+            "depth_factor"
+          ]
+        },
+        {
+          "id": "rate",
+          "op": "mul",
+          "inputs": [
+            "c_depth",
+            "dh"
+          ]
+        },
+        {
+          "id": "flow",
+          "op": "edge_transfer",
+          "resource": "water",
+          "field": "surface_water",
+          "rate": "rate"
+        }
+      ],
+      "effects": [
+        "flow"
+      ]
     },
     {
       "rule_id": "core.env.infiltration",
       "label": "Infiltration into soil",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "k_infiltration": { "value": 0.002, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Infiltration coefficient", "stability": { "kind": "first_order" } }
+        "k_infiltration": {
+          "value": 0.01,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Infiltration coefficient",
+          "stability": {
+            "kind": "first_order"
+          }
+        }
       },
       "nodes": [
-        { "id": "water", "op": "read_state", "field": "surface_water" },
-        { "id": "k", "op": "parameter", "name": "k_infiltration" },
-        { "id": "rate", "op": "mul", "inputs": ["k", "water"] },
-        { "id": "infiltrate", "op": "transfer", "resource": "water", "from": "surface_water", "to": "soil_water", "rate": "rate" }
+        {
+          "id": "water",
+          "op": "read_state",
+          "field": "surface_water"
+        },
+        {
+          "id": "k",
+          "op": "parameter",
+          "name": "k_infiltration"
+        },
+        {
+          "id": "rate",
+          "op": "mul",
+          "inputs": [
+            "k",
+            "water"
+          ]
+        },
+        {
+          "id": "infiltrate",
+          "op": "transfer",
+          "resource": "water",
+          "from": "surface_water",
+          "to": "soil_water",
+          "rate": "rate"
+        }
       ],
-      "effects": ["infiltrate"]
+      "effects": [
+        "infiltrate"
+      ]
     },
     {
       "rule_id": "core.env.groundwater",
       "label": "Drainage to groundwater and spring release",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "k_drainage": { "value": 0.0005, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Drainage coefficient", "stability": { "kind": "first_order" } },
-        "retention": { "value": 0.5, "unit": "1", "min": 0.0, "max": 1.0, "label": "Retained fraction of soil capacity" },
-        "k_spring": { "value": 0.0002, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Spring release coefficient", "stability": { "kind": "first_order" } },
-        "spring_threshold": { "value": 2000.0, "unit": "kg", "min": 0.0, "max": 1000000.0, "label": "Groundwater held back from springs" }
+        "k_drainage": {
+          "value": 0.0005,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Drainage coefficient",
+          "stability": {
+            "kind": "first_order"
+          }
+        },
+        "retention": {
+          "value": 0.5,
+          "unit": "1",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Retained fraction of soil capacity"
+        },
+        "k_spring": {
+          "value": 0.0002,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Spring release coefficient",
+          "stability": {
+            "kind": "first_order"
+          }
+        },
+        "spring_threshold": {
+          "value": 2000.0,
+          "unit": "kg",
+          "min": 0.0,
+          "max": 1000000.0,
+          "label": "Groundwater held back from springs"
+        }
       },
       "nodes": [
-        { "id": "soil", "op": "read_state", "field": "soil_water" },
-        { "id": "cap", "op": "read_state", "field": "soil_water_capacity" },
-        { "id": "retention", "op": "parameter", "name": "retention" },
-        { "id": "held", "op": "mul", "inputs": ["cap", "retention"] },
-        { "id": "excess_raw", "op": "sub", "inputs": ["soil", "held"] },
-        { "id": "zero_kg", "op": "const", "value": 0.0, "unit": "kg" },
-        { "id": "excess", "op": "max", "inputs": ["excess_raw", "zero_kg"] },
-        { "id": "kd", "op": "parameter", "name": "k_drainage" },
-        { "id": "drain_rate", "op": "mul", "inputs": ["kd", "excess"] },
-        { "id": "drain", "op": "transfer", "resource": "water", "from": "soil_water", "to": "groundwater", "rate": "drain_rate" },
-        { "id": "gw", "op": "read_state", "field": "groundwater" },
-        { "id": "threshold", "op": "parameter", "name": "spring_threshold" },
-        { "id": "gw_excess_raw", "op": "sub", "inputs": ["gw", "threshold"] },
-        { "id": "gw_excess", "op": "max", "inputs": ["gw_excess_raw", "zero_kg"] },
-        { "id": "ks", "op": "parameter", "name": "k_spring" },
-        { "id": "spring_rate", "op": "mul", "inputs": ["ks", "gw_excess"] },
-        { "id": "spring", "op": "transfer", "resource": "water", "from": "groundwater", "to": "surface_water", "rate": "spring_rate" }
+        {
+          "id": "soil",
+          "op": "read_state",
+          "field": "soil_water"
+        },
+        {
+          "id": "cap",
+          "op": "read_state",
+          "field": "soil_water_capacity"
+        },
+        {
+          "id": "retention",
+          "op": "parameter",
+          "name": "retention"
+        },
+        {
+          "id": "held",
+          "op": "mul",
+          "inputs": [
+            "cap",
+            "retention"
+          ]
+        },
+        {
+          "id": "excess_raw",
+          "op": "sub",
+          "inputs": [
+            "soil",
+            "held"
+          ]
+        },
+        {
+          "id": "zero_kg",
+          "op": "const",
+          "value": 0.0,
+          "unit": "kg"
+        },
+        {
+          "id": "excess",
+          "op": "max",
+          "inputs": [
+            "excess_raw",
+            "zero_kg"
+          ]
+        },
+        {
+          "id": "kd",
+          "op": "parameter",
+          "name": "k_drainage"
+        },
+        {
+          "id": "drain_rate",
+          "op": "mul",
+          "inputs": [
+            "kd",
+            "excess"
+          ]
+        },
+        {
+          "id": "drain",
+          "op": "transfer",
+          "resource": "water",
+          "from": "soil_water",
+          "to": "groundwater",
+          "rate": "drain_rate"
+        },
+        {
+          "id": "gw",
+          "op": "read_state",
+          "field": "groundwater"
+        },
+        {
+          "id": "threshold",
+          "op": "parameter",
+          "name": "spring_threshold"
+        },
+        {
+          "id": "gw_excess_raw",
+          "op": "sub",
+          "inputs": [
+            "gw",
+            "threshold"
+          ]
+        },
+        {
+          "id": "gw_excess",
+          "op": "max",
+          "inputs": [
+            "gw_excess_raw",
+            "zero_kg"
+          ]
+        },
+        {
+          "id": "ks",
+          "op": "parameter",
+          "name": "k_spring"
+        },
+        {
+          "id": "spring_rate",
+          "op": "mul",
+          "inputs": [
+            "ks",
+            "gw_excess"
+          ]
+        },
+        {
+          "id": "spring",
+          "op": "transfer",
+          "resource": "water",
+          "from": "groundwater",
+          "to": "surface_water",
+          "rate": "spring_rate"
+        }
       ],
-      "effects": ["drain", "spring"]
+      "effects": [
+        "drain",
+        "spring"
+      ]
     },
     {
       "rule_id": "core.env.temperature",
       "label": "Forced temperature relaxation, diffusion, and shaded heating",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "relaxation_time": { "value": 300.0, "unit": "s", "min": 1.0, "max": 100000.0, "label": "Relaxation time" },
-        "diffusivity": { "value": 20.0, "unit": "m^2/s", "min": 0.0, "max": 100.0, "label": "Thermal diffusivity", "stability": { "kind": "diffusion" } },
-        "heating_rate": { "value": 0.02, "unit": "dK/s", "min": 0.0, "max": 1.0, "label": "Radiative heating" },
-        "shade_strength": { "value": 0.8, "unit": "1", "min": 0.0, "max": 1.0, "label": "Heating blocked by full cover" },
-        "wet_cooling": { "value": 0.01, "unit": "dK/s", "min": 0.0, "max": 1.0, "label": "Evaporative cooling of wet ground" }
+        "relaxation_time": {
+          "value": 300.0,
+          "unit": "s",
+          "min": 1.0,
+          "max": 100000.0,
+          "label": "Relaxation time"
+        },
+        "diffusivity": {
+          "value": 20.0,
+          "unit": "m^2/s",
+          "min": 0.0,
+          "max": 100.0,
+          "label": "Thermal diffusivity",
+          "stability": {
+            "kind": "diffusion"
+          }
+        },
+        "heating_rate": {
+          "value": 0.02,
+          "unit": "dK/s",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Radiative heating"
+        },
+        "shade_strength": {
+          "value": 0.8,
+          "unit": "1",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Heating blocked by full cover"
+        },
+        "wet_cooling": {
+          "value": 0.01,
+          "unit": "dK/s",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Evaporative cooling of wet ground"
+        }
       },
       "nodes": [
-        { "id": "t", "op": "read_state", "field": "temperature" },
-        { "id": "ambient", "op": "read_forcing", "forcing": "ambient_temperature" },
-        { "id": "gap", "op": "sub", "inputs": ["ambient", "t"] },
-        { "id": "zero_s", "op": "const", "value": 0.0, "unit": "dK/s" },
-        { "id": "tau", "op": "parameter", "name": "relaxation_time" },
-        { "id": "relax", "op": "safe_divide", "inputs": ["gap", "tau", "zero_s"] },
-        { "id": "lap", "op": "laplacian", "inputs": ["t"] },
-        { "id": "d", "op": "parameter", "name": "diffusivity" },
-        { "id": "diffuse", "op": "mul", "inputs": ["d", "lap"] },
-        { "id": "veg", "op": "read_state", "field": "vegetation_biomass" },
-        { "id": "half", "op": "parameter", "name": "vegetation_half_cover" },
-        { "id": "veg_plus", "op": "add", "inputs": ["veg", "half"] },
-        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
-        { "id": "bare", "op": "safe_divide", "inputs": ["half", "veg_plus", "one"] },
-        { "id": "cover", "op": "sub", "inputs": ["one", "bare"] },
-        { "id": "shade", "op": "parameter", "name": "shade_strength" },
-        { "id": "shaded", "op": "mul", "inputs": ["shade", "cover"] },
-        { "id": "exposure", "op": "sub", "inputs": ["one", "shaded"] },
-        { "id": "h", "op": "parameter", "name": "heating_rate" },
-        { "id": "heat", "op": "mul", "inputs": ["h", "exposure"] },
-        { "id": "soil", "op": "read_state", "field": "soil_water" },
-        { "id": "cap", "op": "read_state", "field": "soil_water_capacity" },
-        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
-        { "id": "moisture", "op": "safe_divide", "inputs": ["soil", "cap", "zero"] },
-        { "id": "wc", "op": "parameter", "name": "wet_cooling" },
-        { "id": "cool", "op": "mul", "inputs": ["wc", "moisture"] },
-        { "id": "r1", "op": "add", "inputs": ["relax", "diffuse"] },
-        { "id": "r2", "op": "add", "inputs": ["r1", "heat"] },
-        { "id": "rate", "op": "sub", "inputs": ["r2", "cool"] },
-        { "id": "integrate", "op": "rate_contribution", "field": "temperature", "rate": "rate" }
+        {
+          "id": "t",
+          "op": "read_state",
+          "field": "temperature"
+        },
+        {
+          "id": "ambient",
+          "op": "read_forcing",
+          "forcing": "ambient_temperature"
+        },
+        {
+          "id": "gap",
+          "op": "sub",
+          "inputs": [
+            "ambient",
+            "t"
+          ]
+        },
+        {
+          "id": "zero_s",
+          "op": "const",
+          "value": 0.0,
+          "unit": "dK/s"
+        },
+        {
+          "id": "tau",
+          "op": "parameter",
+          "name": "relaxation_time"
+        },
+        {
+          "id": "relax",
+          "op": "safe_divide",
+          "inputs": [
+            "gap",
+            "tau",
+            "zero_s"
+          ]
+        },
+        {
+          "id": "lap",
+          "op": "laplacian",
+          "inputs": [
+            "t"
+          ]
+        },
+        {
+          "id": "d",
+          "op": "parameter",
+          "name": "diffusivity"
+        },
+        {
+          "id": "diffuse",
+          "op": "mul",
+          "inputs": [
+            "d",
+            "lap"
+          ]
+        },
+        {
+          "id": "veg",
+          "op": "read_state",
+          "field": "vegetation_biomass"
+        },
+        {
+          "id": "half",
+          "op": "parameter",
+          "name": "vegetation_half_cover"
+        },
+        {
+          "id": "veg_plus",
+          "op": "add",
+          "inputs": [
+            "veg",
+            "half"
+          ]
+        },
+        {
+          "id": "one",
+          "op": "const",
+          "value": 1.0,
+          "unit": "1"
+        },
+        {
+          "id": "bare",
+          "op": "safe_divide",
+          "inputs": [
+            "half",
+            "veg_plus",
+            "one"
+          ]
+        },
+        {
+          "id": "cover",
+          "op": "sub",
+          "inputs": [
+            "one",
+            "bare"
+          ]
+        },
+        {
+          "id": "shade",
+          "op": "parameter",
+          "name": "shade_strength"
+        },
+        {
+          "id": "shaded",
+          "op": "mul",
+          "inputs": [
+            "shade",
+            "cover"
+          ]
+        },
+        {
+          "id": "exposure",
+          "op": "sub",
+          "inputs": [
+            "one",
+            "shaded"
+          ]
+        },
+        {
+          "id": "h",
+          "op": "parameter",
+          "name": "heating_rate"
+        },
+        {
+          "id": "heat",
+          "op": "mul",
+          "inputs": [
+            "h",
+            "exposure"
+          ]
+        },
+        {
+          "id": "soil",
+          "op": "read_state",
+          "field": "soil_water"
+        },
+        {
+          "id": "cap",
+          "op": "read_state",
+          "field": "soil_water_capacity"
+        },
+        {
+          "id": "zero",
+          "op": "const",
+          "value": 0.0,
+          "unit": "1"
+        },
+        {
+          "id": "moisture",
+          "op": "safe_divide",
+          "inputs": [
+            "soil",
+            "cap",
+            "zero"
+          ]
+        },
+        {
+          "id": "wc",
+          "op": "parameter",
+          "name": "wet_cooling"
+        },
+        {
+          "id": "cool",
+          "op": "mul",
+          "inputs": [
+            "wc",
+            "moisture"
+          ]
+        },
+        {
+          "id": "r1",
+          "op": "add",
+          "inputs": [
+            "relax",
+            "diffuse"
+          ]
+        },
+        {
+          "id": "r2",
+          "op": "add",
+          "inputs": [
+            "r1",
+            "heat"
+          ]
+        },
+        {
+          "id": "rate",
+          "op": "sub",
+          "inputs": [
+            "r2",
+            "cool"
+          ]
+        },
+        {
+          "id": "integrate",
+          "op": "rate_contribution",
+          "field": "temperature",
+          "rate": "rate"
+        }
       ],
-      "effects": ["integrate"]
+      "effects": [
+        "integrate"
+      ]
     },
     {
       "rule_id": "core.env.vegetation_growth",
       "label": "Vegetation growth (coupled water, nutrient, biomass reaction)",
       "template": "vegetation",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "growth_coefficient": { "value": 0.002, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Maximum relative growth rate" },
-        "carrying_capacity": { "value": 3000.0, "unit": "kg", "min": 1.0, "max": 1000000.0, "label": "Biomass carrying capacity per cell" },
-        "optimal_temperature": { "value": 290.0, "unit": "K", "min": 250.0, "max": 320.0, "label": "Optimal growth temperature" },
-        "nutrient_per_biomass": { "value": 0.02, "unit": "1", "min": 0.0, "max": 1.0, "label": "Nutrient mass per biomass mass" },
-        "water_per_biomass": { "value": 2.0, "unit": "1", "min": 0.0, "max": 100.0, "label": "Water transpired per biomass grown" },
-        "nutrient_half_saturation": { "value": 10.0, "unit": "kg", "min": 0.001, "max": 100000.0, "label": "Soil nutrients for half-speed growth" }
+        "growth_coefficient": {
+          "value": 0.001,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Maximum relative growth rate"
+        },
+        "carrying_capacity": {
+          "value": 3000.0,
+          "unit": "kg",
+          "min": 1.0,
+          "max": 1000000.0,
+          "label": "Biomass carrying capacity per cell"
+        },
+        "optimal_temperature": {
+          "value": 290.0,
+          "unit": "K",
+          "min": 250.0,
+          "max": 320.0,
+          "label": "Optimal growth temperature"
+        },
+        "nutrient_per_biomass": {
+          "value": 0.02,
+          "unit": "1",
+          "min": 0.0,
+          "max": 1.0,
+          "label": "Nutrient mass per biomass mass"
+        },
+        "water_per_biomass": {
+          "value": 2.0,
+          "unit": "1",
+          "min": 0.0,
+          "max": 100.0,
+          "label": "Water transpired per biomass grown"
+        },
+        "nutrient_half_saturation": {
+          "value": 10.0,
+          "unit": "kg",
+          "min": 0.001,
+          "max": 100000.0,
+          "label": "Soil nutrients for half-speed growth"
+        }
       },
       "nodes": [
-        { "id": "b", "op": "read_state", "field": "vegetation_biomass" },
-        { "id": "k", "op": "parameter", "name": "carrying_capacity" },
-        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
-        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
-        { "id": "fill", "op": "safe_divide", "inputs": ["b", "k", "one"] },
-        { "id": "room_raw", "op": "sub", "inputs": ["one", "fill"] },
-        { "id": "room", "op": "max", "inputs": ["room_raw", "zero"] },
-        { "id": "soil", "op": "read_state", "field": "soil_water" },
-        { "id": "cap", "op": "read_state", "field": "soil_water_capacity" },
-        { "id": "moisture", "op": "safe_divide", "inputs": ["soil", "cap", "zero"] },
-        { "id": "moisture_response", "op": "curve", "inputs": ["moisture"], "in_unit": "1", "out_unit": "1", "points": [[0.0, 0.0], [0.12, 0.0], [0.45, 1.0], [1.0, 1.0]] },
-        { "id": "n", "op": "read_state", "field": "soil_nutrients" },
-        { "id": "nh", "op": "parameter", "name": "nutrient_half_saturation" },
-        { "id": "n_plus", "op": "add", "inputs": ["n", "nh"] },
-        { "id": "nutrient_response", "op": "safe_divide", "inputs": ["n", "n_plus", "zero"] },
-        { "id": "t", "op": "read_state", "field": "temperature" },
-        { "id": "t_opt", "op": "parameter", "name": "optimal_temperature" },
-        { "id": "t_dev", "op": "sub", "inputs": ["t", "t_opt"] },
-        { "id": "temperature_response", "op": "curve", "inputs": ["t_dev"], "in_unit": "dK", "out_unit": "1", "points": [[-18.0, 0.0], [-6.0, 1.0], [6.0, 1.0], [16.0, 0.0]] },
-        { "id": "g", "op": "parameter", "name": "growth_coefficient" },
-        { "id": "gb", "op": "mul", "inputs": ["g", "b"] },
-        { "id": "p1", "op": "mul", "inputs": ["gb", "room"] },
-        { "id": "p2", "op": "mul", "inputs": ["p1", "moisture_response"] },
-        { "id": "p3", "op": "mul", "inputs": ["p2", "nutrient_response"] },
-        { "id": "growth", "op": "mul", "inputs": ["p3", "temperature_response"] },
-        { "id": "npb", "op": "parameter", "name": "nutrient_per_biomass" },
-        { "id": "nutrient_uptake", "op": "mul", "inputs": ["growth", "npb"] },
-        { "id": "nutrient_uptake_q", "op": "as_quantity", "inputs": ["nutrient_uptake"], "quantity": "nutrient" },
-        { "id": "wpb", "op": "parameter", "name": "water_per_biomass" },
-        { "id": "water_use", "op": "mul", "inputs": ["growth", "wpb"] },
-        { "id": "water_use_q", "op": "as_quantity", "inputs": ["water_use"], "quantity": "water" },
         {
-          "id": "grow", "op": "reaction",
+          "id": "b",
+          "op": "read_state",
+          "field": "vegetation_biomass"
+        },
+        {
+          "id": "k",
+          "op": "parameter",
+          "name": "carrying_capacity"
+        },
+        {
+          "id": "one",
+          "op": "const",
+          "value": 1.0,
+          "unit": "1"
+        },
+        {
+          "id": "zero",
+          "op": "const",
+          "value": 0.0,
+          "unit": "1"
+        },
+        {
+          "id": "fill",
+          "op": "safe_divide",
+          "inputs": [
+            "b",
+            "k",
+            "one"
+          ]
+        },
+        {
+          "id": "room_raw",
+          "op": "sub",
+          "inputs": [
+            "one",
+            "fill"
+          ]
+        },
+        {
+          "id": "room",
+          "op": "max",
+          "inputs": [
+            "room_raw",
+            "zero"
+          ]
+        },
+        {
+          "id": "soil",
+          "op": "read_state",
+          "field": "soil_water"
+        },
+        {
+          "id": "cap",
+          "op": "read_state",
+          "field": "soil_water_capacity"
+        },
+        {
+          "id": "moisture",
+          "op": "safe_divide",
+          "inputs": [
+            "soil",
+            "cap",
+            "zero"
+          ]
+        },
+        {
+          "id": "moisture_response",
+          "op": "curve",
+          "inputs": [
+            "moisture"
+          ],
+          "in_unit": "1",
+          "out_unit": "1",
+          "points": [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.12,
+              0.0
+            ],
+            [
+              0.45,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "n",
+          "op": "read_state",
+          "field": "soil_nutrients"
+        },
+        {
+          "id": "nh",
+          "op": "parameter",
+          "name": "nutrient_half_saturation"
+        },
+        {
+          "id": "n_plus",
+          "op": "add",
+          "inputs": [
+            "n",
+            "nh"
+          ]
+        },
+        {
+          "id": "nutrient_response",
+          "op": "safe_divide",
+          "inputs": [
+            "n",
+            "n_plus",
+            "zero"
+          ]
+        },
+        {
+          "id": "t",
+          "op": "read_state",
+          "field": "temperature"
+        },
+        {
+          "id": "t_opt",
+          "op": "parameter",
+          "name": "optimal_temperature"
+        },
+        {
+          "id": "t_dev",
+          "op": "sub",
+          "inputs": [
+            "t",
+            "t_opt"
+          ]
+        },
+        {
+          "id": "temperature_response",
+          "op": "curve",
+          "inputs": [
+            "t_dev"
+          ],
+          "in_unit": "dK",
+          "out_unit": "1",
+          "points": [
+            [
+              -18.0,
+              0.0
+            ],
+            [
+              -6.0,
+              1.0
+            ],
+            [
+              6.0,
+              1.0
+            ],
+            [
+              16.0,
+              0.0
+            ]
+          ]
+        },
+        {
+          "id": "g",
+          "op": "parameter",
+          "name": "growth_coefficient"
+        },
+        {
+          "id": "gb",
+          "op": "mul",
+          "inputs": [
+            "g",
+            "b"
+          ]
+        },
+        {
+          "id": "p1",
+          "op": "mul",
+          "inputs": [
+            "gb",
+            "room"
+          ]
+        },
+        {
+          "id": "p2",
+          "op": "mul",
+          "inputs": [
+            "p1",
+            "moisture_response"
+          ]
+        },
+        {
+          "id": "p3",
+          "op": "mul",
+          "inputs": [
+            "p2",
+            "nutrient_response"
+          ]
+        },
+        {
+          "id": "growth",
+          "op": "mul",
+          "inputs": [
+            "p3",
+            "temperature_response"
+          ]
+        },
+        {
+          "id": "npb",
+          "op": "parameter",
+          "name": "nutrient_per_biomass"
+        },
+        {
+          "id": "nutrient_uptake",
+          "op": "mul",
+          "inputs": [
+            "growth",
+            "npb"
+          ]
+        },
+        {
+          "id": "nutrient_uptake_q",
+          "op": "as_quantity",
+          "inputs": [
+            "nutrient_uptake"
+          ],
+          "quantity": "nutrient"
+        },
+        {
+          "id": "wpb",
+          "op": "parameter",
+          "name": "water_per_biomass"
+        },
+        {
+          "id": "water_use",
+          "op": "mul",
+          "inputs": [
+            "growth",
+            "wpb"
+          ]
+        },
+        {
+          "id": "water_use_q",
+          "op": "as_quantity",
+          "inputs": [
+            "water_use"
+          ],
+          "quantity": "water"
+        },
+        {
+          "id": "grow",
+          "op": "reaction",
           "legs": [
-            { "resource": "biomass", "from": "external.photosynthesis", "to": "vegetation_biomass", "rate": "growth" },
-            { "resource": "nutrient", "from": "soil_nutrients", "to": "plant_nutrients", "rate": "nutrient_uptake_q" },
-            { "resource": "water", "from": "soil_water", "to": "external.transpiration", "rate": "water_use_q" }
+            {
+              "resource": "biomass",
+              "from": "external.photosynthesis",
+              "to": "vegetation_biomass",
+              "rate": "growth"
+            },
+            {
+              "resource": "nutrient",
+              "from": "soil_nutrients",
+              "to": "plant_nutrients",
+              "rate": "nutrient_uptake_q"
+            },
+            {
+              "resource": "water",
+              "from": "soil_water",
+              "to": "external.transpiration",
+              "rate": "water_use_q"
+            }
           ]
         }
       ],
-      "effects": ["grow"]
+      "effects": [
+        "grow"
+      ]
     },
     {
       "rule_id": "core.env.vegetation_mortality",
       "label": "Vegetation mortality to detritus",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "base_mortality": { "value": 0.0001, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Background mortality", "stability": { "kind": "first_order" } },
-        "drought_mortality": { "value": 0.0015, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Additional mortality under drought", "stability": { "kind": "first_order" } },
-        "heat_mortality": { "value": 0.001, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Additional mortality under thermal stress", "stability": { "kind": "first_order" } }
+        "base_mortality": {
+          "value": 0.0001,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Background mortality",
+          "stability": {
+            "kind": "first_order"
+          }
+        },
+        "drought_mortality": {
+          "value": 0.0015,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Additional mortality under drought",
+          "stability": {
+            "kind": "first_order"
+          }
+        },
+        "heat_mortality": {
+          "value": 0.001,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Additional mortality under thermal stress",
+          "stability": {
+            "kind": "first_order"
+          }
+        }
       },
       "nodes": [
-        { "id": "b", "op": "read_state", "field": "vegetation_biomass" },
-        { "id": "pn", "op": "read_state", "field": "plant_nutrients" },
-        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
-        { "id": "drought", "op": "sub", "inputs": ["one", "core.env.vegetation_growth/moisture_response"] },
-        { "id": "heat", "op": "sub", "inputs": ["one", "core.env.vegetation_growth/temperature_response"] },
-        { "id": "m0", "op": "parameter", "name": "base_mortality" },
-        { "id": "md", "op": "parameter", "name": "drought_mortality" },
-        { "id": "mh", "op": "parameter", "name": "heat_mortality" },
-        { "id": "mdd", "op": "mul", "inputs": ["md", "drought"] },
-        { "id": "mhh", "op": "mul", "inputs": ["mh", "heat"] },
-        { "id": "m1", "op": "add", "inputs": ["m0", "mdd"] },
-        { "id": "m", "op": "add", "inputs": ["m1", "mhh"] },
-        { "id": "biomass_rate", "op": "mul", "inputs": ["m", "b"] },
-        { "id": "nutrient_rate", "op": "mul", "inputs": ["m", "pn"] },
         {
-          "id": "die", "op": "reaction",
+          "id": "b",
+          "op": "read_state",
+          "field": "vegetation_biomass"
+        },
+        {
+          "id": "pn",
+          "op": "read_state",
+          "field": "plant_nutrients"
+        },
+        {
+          "id": "one",
+          "op": "const",
+          "value": 1.0,
+          "unit": "1"
+        },
+        {
+          "id": "drought",
+          "op": "sub",
+          "inputs": [
+            "one",
+            "core.env.vegetation_growth/moisture_response"
+          ]
+        },
+        {
+          "id": "heat",
+          "op": "sub",
+          "inputs": [
+            "one",
+            "core.env.vegetation_growth/temperature_response"
+          ]
+        },
+        {
+          "id": "m0",
+          "op": "parameter",
+          "name": "base_mortality"
+        },
+        {
+          "id": "md",
+          "op": "parameter",
+          "name": "drought_mortality"
+        },
+        {
+          "id": "mh",
+          "op": "parameter",
+          "name": "heat_mortality"
+        },
+        {
+          "id": "mdd",
+          "op": "mul",
+          "inputs": [
+            "md",
+            "drought"
+          ]
+        },
+        {
+          "id": "mhh",
+          "op": "mul",
+          "inputs": [
+            "mh",
+            "heat"
+          ]
+        },
+        {
+          "id": "m1",
+          "op": "add",
+          "inputs": [
+            "m0",
+            "mdd"
+          ]
+        },
+        {
+          "id": "m",
+          "op": "add",
+          "inputs": [
+            "m1",
+            "mhh"
+          ]
+        },
+        {
+          "id": "biomass_rate",
+          "op": "mul",
+          "inputs": [
+            "m",
+            "b"
+          ]
+        },
+        {
+          "id": "nutrient_rate",
+          "op": "mul",
+          "inputs": [
+            "m",
+            "pn"
+          ]
+        },
+        {
+          "id": "die",
+          "op": "reaction",
           "legs": [
-            { "resource": "biomass", "from": "vegetation_biomass", "to": "detritus_biomass", "rate": "biomass_rate" },
-            { "resource": "nutrient", "from": "plant_nutrients", "to": "detritus_nutrients", "rate": "nutrient_rate" }
+            {
+              "resource": "biomass",
+              "from": "vegetation_biomass",
+              "to": "detritus_biomass",
+              "rate": "biomass_rate"
+            },
+            {
+              "resource": "nutrient",
+              "from": "plant_nutrients",
+              "to": "detritus_nutrients",
+              "rate": "nutrient_rate"
+            }
           ]
         }
       ],
-      "effects": ["die"]
+      "effects": [
+        "die"
+      ]
     },
     {
       "rule_id": "core.env.decomposition",
       "label": "Decomposition returns nutrients to soil",
-      "domain": { "kind": "cells" },
+      "domain": {
+        "kind": "cells"
+      },
       "parameters": {
-        "k_decomposition": { "value": 0.001, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Decomposition rate", "stability": { "kind": "first_order" } }
+        "k_decomposition": {
+          "value": 0.001,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Decomposition rate",
+          "stability": {
+            "kind": "first_order"
+          }
+        }
       },
       "nodes": [
-        { "id": "db", "op": "read_state", "field": "detritus_biomass" },
-        { "id": "dn", "op": "read_state", "field": "detritus_nutrients" },
-        { "id": "k", "op": "parameter", "name": "k_decomposition" },
-        { "id": "moist", "op": "curve", "inputs": ["core.env.vegetation_growth/moisture"], "in_unit": "1", "out_unit": "1", "points": [[0.0, 0.2], [0.4, 1.0], [1.0, 1.0]] },
-        { "id": "km", "op": "mul", "inputs": ["k", "moist"] },
-        { "id": "biomass_rate", "op": "mul", "inputs": ["km", "db"] },
-        { "id": "nutrient_rate", "op": "mul", "inputs": ["km", "dn"] },
-        { "id": "respire", "op": "external_sink", "resource": "biomass", "from": "detritus_biomass", "account": "external.respiration", "rate": "biomass_rate" },
-        { "id": "mineralize", "op": "transfer", "resource": "nutrient", "from": "detritus_nutrients", "to": "soil_nutrients", "rate": "nutrient_rate" }
+        {
+          "id": "db",
+          "op": "read_state",
+          "field": "detritus_biomass"
+        },
+        {
+          "id": "dn",
+          "op": "read_state",
+          "field": "detritus_nutrients"
+        },
+        {
+          "id": "k",
+          "op": "parameter",
+          "name": "k_decomposition"
+        },
+        {
+          "id": "moist",
+          "op": "curve",
+          "inputs": [
+            "core.env.vegetation_growth/moisture"
+          ],
+          "in_unit": "1",
+          "out_unit": "1",
+          "points": [
+            [
+              0.0,
+              0.2
+            ],
+            [
+              0.4,
+              1.0
+            ],
+            [
+              1.0,
+              1.0
+            ]
+          ]
+        },
+        {
+          "id": "km",
+          "op": "mul",
+          "inputs": [
+            "k",
+            "moist"
+          ]
+        },
+        {
+          "id": "biomass_rate",
+          "op": "mul",
+          "inputs": [
+            "km",
+            "db"
+          ]
+        },
+        {
+          "id": "nutrient_rate",
+          "op": "mul",
+          "inputs": [
+            "km",
+            "dn"
+          ]
+        },
+        {
+          "id": "respire",
+          "op": "external_sink",
+          "resource": "biomass",
+          "from": "detritus_biomass",
+          "account": "external.respiration",
+          "rate": "biomass_rate"
+        },
+        {
+          "id": "mineralize",
+          "op": "transfer",
+          "resource": "nutrient",
+          "from": "detritus_nutrients",
+          "to": "soil_nutrients",
+          "rate": "nutrient_rate"
+        }
       ],
-      "effects": ["respire", "mineralize"]
+      "effects": [
+        "respire",
+        "mineralize"
+      ]
     },
     {
       "rule_id": "core.env.dispersal",
       "label": "Resource-funded vegetation dispersal to neighbors",
-      "domain": { "kind": "edges" },
+      "domain": {
+        "kind": "edges"
+      },
       "parameters": {
-        "k_dispersal": { "value": 0.00005, "unit": "1/s", "min": 0.0, "max": 0.1, "label": "Dispersal rate per biomass difference", "stability": { "kind": "first_order" } }
+        "k_dispersal": {
+          "value": 5e-05,
+          "unit": "1/s",
+          "min": 0.0,
+          "max": 0.1,
+          "label": "Dispersal rate per biomass difference",
+          "stability": {
+            "kind": "first_order"
+          }
+        }
       },
       "nodes": [
-        { "id": "b", "op": "read_state", "field": "vegetation_biomass" },
-        { "id": "pn", "op": "read_state", "field": "plant_nutrients" },
-        { "id": "b_from", "op": "edge_from", "inputs": ["b"] },
-        { "id": "b_to", "op": "edge_to", "inputs": ["b"] },
-        { "id": "db", "op": "sub", "inputs": ["b_from", "b_to"] },
-        { "id": "n_from", "op": "edge_from", "inputs": ["pn"] },
-        { "id": "n_to", "op": "edge_to", "inputs": ["pn"] },
-        { "id": "dn", "op": "sub", "inputs": ["n_from", "n_to"] },
-        { "id": "k", "op": "parameter", "name": "k_dispersal" },
-        { "id": "biomass_rate", "op": "mul", "inputs": ["k", "db"] },
-        { "id": "nutrient_rate", "op": "mul", "inputs": ["k", "dn"] },
-        { "id": "spread_biomass", "op": "edge_transfer", "resource": "biomass", "field": "vegetation_biomass", "rate": "biomass_rate" },
-        { "id": "spread_nutrients", "op": "edge_transfer", "resource": "nutrient", "field": "plant_nutrients", "rate": "nutrient_rate" }
+        {
+          "id": "b",
+          "op": "read_state",
+          "field": "vegetation_biomass"
+        },
+        {
+          "id": "pn",
+          "op": "read_state",
+          "field": "plant_nutrients"
+        },
+        {
+          "id": "b_from",
+          "op": "edge_from",
+          "inputs": [
+            "b"
+          ]
+        },
+        {
+          "id": "b_to",
+          "op": "edge_to",
+          "inputs": [
+            "b"
+          ]
+        },
+        {
+          "id": "db",
+          "op": "sub",
+          "inputs": [
+            "b_from",
+            "b_to"
+          ]
+        },
+        {
+          "id": "n_from",
+          "op": "edge_from",
+          "inputs": [
+            "pn"
+          ]
+        },
+        {
+          "id": "n_to",
+          "op": "edge_to",
+          "inputs": [
+            "pn"
+          ]
+        },
+        {
+          "id": "dn",
+          "op": "sub",
+          "inputs": [
+            "n_from",
+            "n_to"
+          ]
+        },
+        {
+          "id": "k",
+          "op": "parameter",
+          "name": "k_dispersal"
+        },
+        {
+          "id": "biomass_rate",
+          "op": "mul",
+          "inputs": [
+            "k",
+            "db"
+          ]
+        },
+        {
+          "id": "nutrient_rate",
+          "op": "mul",
+          "inputs": [
+            "k",
+            "dn"
+          ]
+        },
+        {
+          "id": "spread_biomass",
+          "op": "edge_transfer",
+          "resource": "biomass",
+          "field": "vegetation_biomass",
+          "rate": "biomass_rate"
+        },
+        {
+          "id": "spread_nutrients",
+          "op": "edge_transfer",
+          "resource": "nutrient",
+          "field": "plant_nutrients",
+          "rate": "nutrient_rate"
+        }
       ],
-      "effects": ["spread_biomass", "spread_nutrients"]
+      "effects": [
+        "spread_biomass",
+        "spread_nutrients"
+      ]
     }
   ]
 }

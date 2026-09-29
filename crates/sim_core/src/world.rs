@@ -140,7 +140,7 @@ pub struct Event {
     pub kind: EventKind,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, serde::Deserialize)]
 pub struct ResourceLedger {
     pub resource: String,
     pub initial: f64,
@@ -171,7 +171,7 @@ pub struct Sample {
     pub mean_generation: Vec<f64>,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, serde::Deserialize)]
 pub struct Stats {
     pub births: u64,
     pub deaths: u64,
@@ -272,10 +272,10 @@ pub struct World {
     pub prev: Option<State>,
     pub elevation_norm: Vec<f64>,
     pub config: RunConfig,
-    pool: Option<Arc<rayon::ThreadPool>>,
-    forcing: Vec<Vec<f64>>,
-    bufs: Buffers,
-    spare: Option<State>,
+    pub(crate) pool: Option<Arc<rayon::ThreadPool>>,
+    pub(crate) forcing: Vec<Vec<f64>>,
+    pub(crate) bufs: Buffers,
+    pub(crate) spare: Option<State>,
     pub pending: Vec<Command>,
     /// Every command applied, in order (the replay log).
     pub log: Vec<Command>,
@@ -519,6 +519,10 @@ impl World {
         };
         w.sample();
         Ok(w)
+    }
+
+    pub fn buffers(&self) -> &Buffers {
+        &self.bufs
     }
 
     pub fn plan(&self) -> &Plan {

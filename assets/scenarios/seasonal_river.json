@@ -3,38 +3,136 @@
   "scenario_id": "guided.seasonal_river",
   "label": "The seasonal river",
   "seed": 20260929,
-  "grid": { "width": 256, "height": 256, "cell_size": 10.0 },
-  "packages": ["core/environment.json", "core/biology.json"],
+  "grid": {
+    "width": 256,
+    "height": 256,
+    "cell_size": 10.0
+  },
+  "packages": [
+    "core/environment.json",
+    "core/biology.json"
+  ],
   "dt": 0.25,
-  "terrain": { "kind": "valley", "relief": 60.0, "valley_depth": 8.0, "basin_depth": 12.0, "roughness": 6.0 },
+  "terrain": {
+    "kind": "valley",
+    "relief": 60.0,
+    "valley_depth": 8.0,
+    "basin_depth": 12.0,
+    "roughness": 6.0
+  },
   "initial": {
-    "temperature": { "kind": "elevation", "a": 292.0, "b": -10.0 },
-    "surface_water": { "kind": "fill_to_level", "level": 5.0, "density": 1000.0, "max_depth": 5.0 },
-    "soil_water": { "kind": "constant", "value": 1500.0 },
-    "groundwater": { "kind": "constant", "value": 3000.0 },
-    "vegetation_biomass": { "kind": "noise", "lo": 100.0, "hi": 1500.0, "feature": 20.0 },
-    "plant_nutrients": { "kind": "scale_of", "field": "vegetation_biomass", "factor": 0.02 },
-    "soil_nutrients": { "kind": "noise", "lo": 30.0, "hi": 90.0, "feature": 30.0 }
+    "temperature": {
+      "kind": "elevation",
+      "a": 292.0,
+      "b": -10.0
+    },
+    "surface_water": {
+      "kind": "fill_to_level",
+      "level": 5.0,
+      "density": 1000.0,
+      "max_depth": 5.0
+    },
+    "soil_water": {
+      "kind": "constant",
+      "value": 1500.0
+    },
+    "groundwater": {
+      "kind": "constant",
+      "value": 3000.0
+    },
+    "vegetation_biomass": {
+      "kind": "noise",
+      "lo": 100.0,
+      "hi": 1500.0,
+      "feature": 20.0
+    },
+    "plant_nutrients": {
+      "kind": "scale_of",
+      "field": "vegetation_biomass",
+      "factor": 0.02
+    },
+    "soil_nutrients": {
+      "kind": "noise",
+      "lo": 30.0,
+      "hi": 90.0,
+      "feature": 30.0
+    }
   },
   "weather": {
     "signals": {
-      "rain_flux": { "mean": 0.004, "amplitude": 0.0035, "period": 1200.0, "noise": 0.0015, "noise_interval": 60.0, "elevation_coefficient": 1.5, "min": 0.0 },
-      "ambient_temperature": { "mean": 291.0, "amplitude": 6.0, "period": 1200.0, "phase": 3.14159, "elevation_coefficient": -0.035 },
-      "relative_humidity": { "mean": 0.55, "amplitude": 0.15, "period": 1200.0, "min": 0.05, "max": 0.98 }
+      "rain_flux": {
+        "mean": 0.006,
+        "amplitude": 0.005,
+        "period": 1200.0,
+        "noise": 0.0015,
+        "noise_interval": 60.0,
+        "elevation_coefficient": 1.5,
+        "min": 0.0
+      },
+      "ambient_temperature": {
+        "mean": 291.0,
+        "amplitude": 6.0,
+        "period": 1200.0,
+        "phase": 3.14159,
+        "elevation_coefficient": -0.035
+      },
+      "relative_humidity": {
+        "mean": 0.55,
+        "amplitude": 0.15,
+        "period": 1200.0,
+        "min": 0.05,
+        "max": 0.98
+      }
     }
   },
   "regions": [
-    { "id": "upstream", "label": "Upstream catchment", "shape": { "kind": "rect", "x0": 0, "z0": 0, "x1": 256, "z1": 96 } },
-    { "id": "basin", "label": "Lower basin", "shape": { "kind": "circle", "cx": 128.0, "cz": 205.0, "radius": 40.0, "feather": 8.0 } }
+    {
+      "id": "upstream",
+      "label": "Upstream catchment",
+      "shape": {
+        "kind": "rect",
+        "x0": 0,
+        "z0": 0,
+        "x1": 256,
+        "z1": 96
+      }
+    },
+    {
+      "id": "basin",
+      "label": "Lower basin",
+      "shape": {
+        "kind": "circle",
+        "cx": 128.0,
+        "cz": 205.0,
+        "radius": 40.0,
+        "feather": 8.0
+      }
+    }
   ],
   "populations": [
-    { "archetype": "herbivore", "count": 500, "genome": "random" }
+    {
+      "archetype": "herbivore",
+      "count": 500,
+      "genome": "random"
+    }
   ],
   "population_cap": 10000,
   "guide": [
-    { "title": "Observe", "body": "Uplands in the north catch more rain. Water flows by hydraulic head down the valley into the basin. Toggle overlays for surface water, soil moisture, temperature and vegetation. Select a cell to see its accepted water budget." },
-    { "title": "Reduce upstream rain", "body": "Open the law editor, select 'Rainfall' and insert a regional multiplier using the 'upstream' region, or duplicate the rule and scope it. Apply it at the next tick boundary. Run at 10x and watch the river's budget: inflow from the catchment falls below evaporation and infiltration." },
-    { "title": "Restore and compare", "body": "Branch from your checkpoint and restore rainfall in one branch. Compare water budgets, vegetation and population between branches. Recovery depends on surviving vegetation and groundwater, not on a scripted switch." },
-    { "title": "Change a biological law", "body": "Edit the metabolism or water-balance rule so heat raises water demand more steeply. Organisms with different inherited water conservation and thermal tolerance experience different costs. Watch the lineage panel's trait distributions over time." }
+    {
+      "title": "Observe",
+      "body": "Uplands in the north catch more rain. Water flows by hydraulic head down the valley into the basin. Toggle overlays for surface water, soil moisture, temperature and vegetation. Select a cell to see its accepted water budget."
+    },
+    {
+      "title": "Reduce upstream rain",
+      "body": "Open the law editor, select 'Rainfall' and insert a regional multiplier using the 'upstream' region, or duplicate the rule and scope it. Apply it at the next tick boundary. Run at 10x and watch the river's budget: inflow from the catchment falls below evaporation and infiltration."
+    },
+    {
+      "title": "Restore and compare",
+      "body": "Branch from your checkpoint and restore rainfall in one branch. Compare water budgets, vegetation and population between branches. Recovery depends on surviving vegetation and groundwater, not on a scripted switch."
+    },
+    {
+      "title": "Change a biological law",
+      "body": "Edit the metabolism or water-balance rule so heat raises water demand more steeply. Organisms with different inherited water conservation and thermal tolerance experience different costs. Watch the lineage panel's trait distributions over time."
+    }
   ]
 }
