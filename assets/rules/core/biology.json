@@ -1,0 +1,389 @@
+{
+  "schema_version": 1,
+  "package_id": "core.biology",
+  "version": "1.0.0",
+  "label": "Standard biology: an evolving herbivore",
+  "requires": ["core.environment"],
+  "capabilities": ["core.entities.v1", "brain.mlp.tanh.v1", "sandbox.external_source"],
+  "resources": [
+    { "id": "energy", "unit": "J", "tolerance_abs": 1e-6 }
+  ],
+  "accounts": [
+    { "id": "external.food_energy", "resource": "energy", "direction": "source", "label": "Metabolizable energy of eaten biomass (toy exchange)" },
+    { "id": "external.heat", "resource": "energy", "direction": "sink", "label": "Energy dissipated as heat" },
+    { "id": "external.ingested", "resource": "biomass", "direction": "sink", "label": "Plant biomass digested by herbivores" }
+  ],
+  "archetypes": [
+    {
+      "id": "herbivore",
+      "label": "Herbivore",
+      "fields": [
+        { "id": "energy", "unit": "J", "policy": { "kind": "reservoir", "resource": "energy", "capacity": "core.bio.capacity/energy_cap" }, "label": "Stored energy" },
+        { "id": "body_water", "unit": "kg", "policy": { "kind": "reservoir", "resource": "water", "capacity": "core.bio.capacity/water_cap" }, "label": "Body water" },
+        { "id": "body_nutrients", "unit": "kg", "policy": { "kind": "reservoir", "resource": "nutrient" }, "label": "Body nutrient store" },
+        { "id": "health", "unit": "1", "policy": { "kind": "integrated" }, "default": 1.0, "min": -0.5, "max": 1.5, "label": "Health" }
+      ],
+      "traits": [
+        { "id": "body_size", "unit": "1", "min": 0.4, "max": 2.5, "init_min": 0.8, "init_max": 1.2, "label": "Body size" },
+        { "id": "preferred_temperature", "unit": "K", "min": 270.0, "max": 315.0, "init_min": 286.0, "init_max": 294.0, "label": "Preferred temperature" },
+        { "id": "tolerance_breadth", "unit": "dK", "min": 1.0, "max": 20.0, "init_min": 4.0, "init_max": 8.0, "label": "Thermal tolerance breadth" },
+        { "id": "water_conservation", "unit": "1", "min": 0.0, "max": 0.95, "init_min": 0.2, "init_max": 0.5, "label": "Water-conservation efficiency" },
+        { "id": "locomotion_efficiency", "unit": "1", "min": 0.2, "max": 1.0, "init_min": 0.4, "init_max": 0.6, "label": "Locomotion efficiency" }
+      ],
+      "brain": { "backend": "mlp.tanh.v1", "inputs": 12, "hidden": 16, "outputs": 6, "weight_bound": 4.0, "init_scale": 1.0 },
+      "max_speed": 4.0,
+      "max_turn_rate": 3.0,
+      "death_disposal": [
+        { "field": "energy", "to": "external.heat" },
+        { "field": "body_water", "to": "cell.soil_water" },
+        { "field": "body_nutrients", "to": "cell.detritus_nutrients" }
+      ],
+      "mutation": { "probability": 0.02, "scale": 0.08 },
+      "reproduction_cooldown": 60.0,
+      "seed_state": { "energy": 30000.0, "body_water": 12.0, "body_nutrients": 0.6, "health": 1.0 }
+    }
+  ],
+  "parameters": {
+    "max_age": { "value": 1500.0, "unit": "s", "min": 10.0, "max": 1000000.0, "label": "Maximum lifespan" },
+    "maturity_age": { "value": 90.0, "unit": "s", "min": 0.0, "max": 100000.0, "label": "Age of reproductive maturity" }
+  },
+  "rules": [
+    {
+      "rule_id": "core.bio.capacity",
+      "label": "Body capacities from size",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "energy_per_size": { "value": 50000.0, "unit": "J", "min": 1.0, "max": 10000000.0, "label": "Energy capacity per unit size" },
+        "water_per_size": { "value": 20.0, "unit": "kg", "min": 0.01, "max": 10000.0, "label": "Water capacity per unit size" }
+      },
+      "nodes": [
+        { "id": "size", "op": "trait", "name": "body_size" },
+        { "id": "eps", "op": "parameter", "name": "energy_per_size" },
+        { "id": "wps", "op": "parameter", "name": "water_per_size" },
+        { "id": "energy_cap", "op": "mul", "inputs": ["eps", "size"] },
+        { "id": "water_cap", "op": "mul", "inputs": ["wps", "size"] }
+      ]
+    },
+    {
+      "rule_id": "core.bio.senses",
+      "label": "Observations and brain",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "sense_distance": { "value": 20.0, "unit": "m", "min": 0.0, "max": 40.0, "label": "Gradient sensing distance" },
+        "food_scale": { "value": 0.001, "unit": "1/kg", "min": 0.0, "max": 1.0, "label": "Vegetation normalization" },
+        "water_scale": { "value": 0.0005, "unit": "1/kg", "min": 0.0, "max": 1.0, "label": "Water normalization" },
+        "discomfort_scale": { "value": 0.1, "unit": "1/dK", "min": 0.0, "max": 10.0, "label": "Thermal discomfort normalization" }
+      },
+      "nodes": [
+        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
+        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
+        { "id": "minus_one", "op": "const", "value": -1.0, "unit": "1" },
+        { "id": "energy", "op": "read_state", "field": "self.energy" },
+        { "id": "energy_frac", "op": "safe_divide", "inputs": ["energy", "core.bio.capacity/energy_cap", "zero"] },
+        { "id": "water", "op": "read_state", "field": "self.body_water" },
+        { "id": "hydration", "op": "safe_divide", "inputs": ["water", "core.bio.capacity/water_cap", "zero"] },
+        { "id": "t_cell", "op": "read_state", "field": "temperature" },
+        { "id": "t_here", "op": "sample", "inputs": ["t_cell"] },
+        { "id": "t_pref", "op": "trait", "name": "preferred_temperature" },
+        { "id": "t_dev", "op": "sub", "inputs": ["t_here", "t_pref"] },
+        { "id": "t_abs", "op": "abs", "inputs": ["t_dev"] },
+        { "id": "breadth", "op": "trait", "name": "tolerance_breadth" },
+        { "id": "zero_dk", "op": "const", "value": 0.0, "unit": "dK" },
+        { "id": "excess_raw", "op": "sub", "inputs": ["t_abs", "breadth"] },
+        { "id": "thermal_excess", "op": "max", "inputs": ["excess_raw", "zero_dk"] },
+        { "id": "ds", "op": "parameter", "name": "discomfort_scale" },
+        { "id": "disc_raw", "op": "mul", "inputs": ["thermal_excess", "ds"] },
+        { "id": "discomfort", "op": "clamp", "inputs": ["disc_raw", "zero", "one"] },
+        { "id": "veg", "op": "read_state", "field": "vegetation_biomass" },
+        { "id": "sw", "op": "read_state", "field": "surface_water" },
+        { "id": "fs", "op": "parameter", "name": "food_scale" },
+        { "id": "ws", "op": "parameter", "name": "water_scale" },
+        { "id": "veg_here", "op": "sample", "inputs": ["veg"] },
+        { "id": "food_raw", "op": "mul", "inputs": ["veg_here", "fs"] },
+        { "id": "food", "op": "clamp", "inputs": ["food_raw", "zero", "one"] },
+        { "id": "sw_here", "op": "sample", "inputs": ["sw"] },
+        { "id": "water_raw", "op": "mul", "inputs": ["sw_here", "ws"] },
+        { "id": "water_avail", "op": "clamp", "inputs": ["water_raw", "zero", "one"] },
+        { "id": "veg_f", "op": "sample_offset", "inputs": ["veg"], "forward": 20.0, "lateral": 0.0 },
+        { "id": "veg_b", "op": "sample_offset", "inputs": ["veg"], "forward": -20.0, "lateral": 0.0 },
+        { "id": "veg_l", "op": "sample_offset", "inputs": ["veg"], "forward": 0.0, "lateral": 20.0 },
+        { "id": "veg_r", "op": "sample_offset", "inputs": ["veg"], "forward": 0.0, "lateral": -20.0 },
+        { "id": "food_fwd_raw", "op": "sub", "inputs": ["veg_f", "veg_b"] },
+        { "id": "food_lat_raw", "op": "sub", "inputs": ["veg_l", "veg_r"] },
+        { "id": "food_fwd_s", "op": "mul", "inputs": ["food_fwd_raw", "fs"] },
+        { "id": "food_lat_s", "op": "mul", "inputs": ["food_lat_raw", "fs"] },
+        { "id": "food_fwd", "op": "clamp", "inputs": ["food_fwd_s", "minus_one", "one"] },
+        { "id": "food_lat", "op": "clamp", "inputs": ["food_lat_s", "minus_one", "one"] },
+        { "id": "sw_f", "op": "sample_offset", "inputs": ["sw"], "forward": 20.0, "lateral": 0.0 },
+        { "id": "sw_b", "op": "sample_offset", "inputs": ["sw"], "forward": -20.0, "lateral": 0.0 },
+        { "id": "sw_l", "op": "sample_offset", "inputs": ["sw"], "forward": 0.0, "lateral": 20.0 },
+        { "id": "sw_r", "op": "sample_offset", "inputs": ["sw"], "forward": 0.0, "lateral": -20.0 },
+        { "id": "water_fwd_raw", "op": "sub", "inputs": ["sw_f", "sw_b"] },
+        { "id": "water_lat_raw", "op": "sub", "inputs": ["sw_l", "sw_r"] },
+        { "id": "water_fwd_s", "op": "mul", "inputs": ["water_fwd_raw", "ws"] },
+        { "id": "water_lat_s", "op": "mul", "inputs": ["water_lat_raw", "ws"] },
+        { "id": "water_fwd", "op": "clamp", "inputs": ["water_fwd_s", "minus_one", "one"] },
+        { "id": "water_lat", "op": "clamp", "inputs": ["water_lat_s", "minus_one", "one"] },
+        { "id": "age", "op": "builtin", "name": "age" },
+        { "id": "max_age", "op": "parameter", "name": "max_age" },
+        { "id": "age_frac", "op": "safe_divide", "inputs": ["age", "max_age", "one"] },
+        { "id": "crowd_n", "op": "crowding", "radius": 1 },
+        { "id": "crowd_scale", "op": "const", "value": 0.125, "unit": "1" },
+        { "id": "crowd_raw", "op": "mul", "inputs": ["crowd_n", "crowd_scale"] },
+        { "id": "crowding", "op": "clamp", "inputs": ["crowd_raw", "zero", "one"] },
+        { "id": "noise_u", "op": "random" },
+        { "id": "two", "op": "const", "value": 2.0, "unit": "1" },
+        { "id": "noise_2", "op": "mul", "inputs": ["noise_u", "two"] },
+        { "id": "noise", "op": "sub", "inputs": ["noise_2", "one"] },
+        {
+          "id": "brain", "op": "brain",
+          "inputs": ["energy_frac", "hydration", "discomfort", "food", "water_avail", "food_fwd", "food_lat", "water_fwd", "water_lat", "age_frac", "crowding", "noise"]
+        }
+      ]
+    },
+    {
+      "rule_id": "core.bio.metabolism",
+      "label": "Basal metabolism with size, tolerance, and water-conservation costs",
+      "template": "metabolism",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "basal_rate": { "value": 25.0, "unit": "W", "min": 0.0, "max": 100000.0, "label": "Basal metabolic power at size 1" },
+        "tolerance_cost": { "value": 0.04, "unit": "1/dK", "min": 0.0, "max": 1.0, "label": "Maintenance cost per kelvin of tolerance breadth" },
+        "conservation_cost": { "value": 0.5, "unit": "1", "min": 0.0, "max": 10.0, "label": "Maintenance cost of full water conservation" },
+        "thermal_cost": { "value": 1.5, "unit": "1", "min": 0.0, "max": 20.0, "label": "Extra metabolism under full thermal discomfort" },
+        "rest_saving": { "value": 0.3, "unit": "1", "min": 0.0, "max": 0.9, "label": "Basal saving while resting" },
+        "size_exponent": { "value": 0.75, "unit": "1", "min": 0.0, "max": 2.0, "label": "Allometric exponent" }
+      },
+      "nodes": [
+        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
+        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
+        { "id": "size", "op": "trait", "name": "body_size" },
+        { "id": "exp", "op": "parameter", "name": "size_exponent" },
+        { "id": "allometry", "op": "pow", "inputs": ["size", "exp"] },
+        { "id": "breadth", "op": "trait", "name": "tolerance_breadth" },
+        { "id": "tc", "op": "parameter", "name": "tolerance_cost" },
+        { "id": "tol_extra", "op": "mul", "inputs": ["tc", "breadth"] },
+        { "id": "wcons", "op": "trait", "name": "water_conservation" },
+        { "id": "cc", "op": "parameter", "name": "conservation_cost" },
+        { "id": "cons_extra", "op": "mul", "inputs": ["cc", "wcons"] },
+        { "id": "thc", "op": "parameter", "name": "thermal_cost" },
+        { "id": "therm_extra", "op": "mul", "inputs": ["thc", "core.bio.senses/discomfort"] },
+        { "id": "rest_raw", "op": "clamp", "inputs": ["core.bio.senses/brain.out5", "zero", "one"] },
+        { "id": "rs", "op": "parameter", "name": "rest_saving" },
+        { "id": "rest_cut", "op": "mul", "inputs": ["rest_raw", "rs"] },
+        { "id": "f1", "op": "add", "inputs": ["one", "tol_extra"] },
+        { "id": "f2", "op": "add", "inputs": ["f1", "cons_extra"] },
+        { "id": "f3", "op": "add", "inputs": ["f2", "therm_extra"] },
+        { "id": "f4", "op": "sub", "inputs": ["f3", "rest_cut"] },
+        { "id": "base", "op": "parameter", "name": "basal_rate" },
+        { "id": "b1", "op": "mul", "inputs": ["base", "allometry"] },
+        { "id": "power", "op": "mul", "inputs": ["b1", "f4"] },
+        { "id": "burn", "op": "external_sink", "resource": "energy", "from": "self.energy", "account": "external.heat", "rate": "power" }
+      ],
+      "effects": ["burn"]
+    },
+    {
+      "rule_id": "core.bio.movement",
+      "label": "Energy-funded movement",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "top_speed": { "value": 3.0, "unit": "m/s", "min": 0.0, "max": 4.0, "label": "Top speed" },
+        "turn_rate": { "value": 2.0, "unit": "1/s", "min": 0.0, "max": 3.0, "label": "Turn rate (rad/s)" },
+        "cost_per_meter": { "value": 8.0, "unit": "J/m", "min": 0.0, "max": 100000.0, "label": "Transport cost per meter at size 1" }
+      },
+      "nodes": [
+        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
+        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
+        { "id": "fwd", "op": "clamp", "inputs": ["core.bio.senses/brain.out1", "zero", "one"] },
+        { "id": "rest", "op": "clamp", "inputs": ["core.bio.senses/brain.out5", "zero", "one"] },
+        { "id": "active", "op": "sub", "inputs": ["one", "rest"] },
+        { "id": "vmax", "op": "parameter", "name": "top_speed" },
+        { "id": "v1", "op": "mul", "inputs": ["fwd", "vmax"] },
+        { "id": "speed_request", "op": "mul", "inputs": ["v1", "active"] },
+        { "id": "cpm", "op": "parameter", "name": "cost_per_meter" },
+        { "id": "size", "op": "trait", "name": "body_size" },
+        { "id": "eff", "op": "trait", "name": "locomotion_efficiency" },
+        { "id": "c1", "op": "mul", "inputs": ["cpm", "size"] },
+        { "id": "cost", "op": "safe_divide", "inputs": ["c1", "eff", "c1"] },
+        { "id": "power", "op": "mul", "inputs": ["speed_request", "cost"] },
+        { "id": "pay", "op": "external_sink", "resource": "energy", "from": "self.energy", "account": "external.heat", "rate": "power" },
+        { "id": "speed", "op": "mul", "inputs": ["speed_request", "pay.fraction"] },
+        { "id": "tr", "op": "parameter", "name": "turn_rate" },
+        { "id": "turn", "op": "mul", "inputs": ["core.bio.senses/brain.out0", "tr"] },
+        { "id": "move", "op": "move", "turn": "turn", "speed": "speed" }
+      ],
+      "effects": ["pay", "move"]
+    },
+    {
+      "rule_id": "core.bio.feeding",
+      "label": "Eating and drinking at the organism's cell",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "bite_rate": { "value": 0.3, "unit": "kg/s", "min": 0.0, "max": 100.0, "label": "Maximum grazing rate at size 1" },
+        "energy_density": { "value": 6000.0, "unit": "J/kg", "min": 0.0, "max": 1000000.0, "label": "Metabolizable energy per kg biomass" },
+        "drink_rate": { "value": 0.5, "unit": "kg/s", "min": 0.0, "max": 100.0, "label": "Maximum drinking rate at size 1" }
+      },
+      "nodes": [
+        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
+        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
+        { "id": "size", "op": "trait", "name": "body_size" },
+        { "id": "eat_drive", "op": "clamp", "inputs": ["core.bio.senses/brain.out2", "zero", "one"] },
+        { "id": "bite", "op": "parameter", "name": "bite_rate" },
+        { "id": "b1", "op": "mul", "inputs": ["bite", "size"] },
+        { "id": "eat_rate", "op": "mul", "inputs": ["b1", "eat_drive"] },
+        { "id": "veg_cell", "op": "read_state", "field": "vegetation_biomass" },
+        { "id": "pn_cell", "op": "read_state", "field": "plant_nutrients" },
+        { "id": "veg_here", "op": "sample", "inputs": ["veg_cell"] },
+        { "id": "pn_here", "op": "sample", "inputs": ["pn_cell"] },
+        { "id": "ratio", "op": "safe_divide", "inputs": ["pn_here", "veg_here", "zero"] },
+        { "id": "nutrient_rate_raw", "op": "mul", "inputs": ["eat_rate", "ratio"] },
+        { "id": "nutrient_rate", "op": "as_quantity", "inputs": ["nutrient_rate_raw"], "quantity": "nutrient" },
+        { "id": "ed", "op": "parameter", "name": "energy_density" },
+        { "id": "energy_rate", "op": "mul", "inputs": ["eat_rate", "ed"] },
+        {
+          "id": "eat", "op": "reaction",
+          "legs": [
+            { "resource": "biomass", "from": "cell.vegetation_biomass", "to": "external.ingested", "rate": "eat_rate" },
+            { "resource": "nutrient", "from": "cell.plant_nutrients", "to": "self.body_nutrients", "rate": "nutrient_rate" },
+            { "resource": "energy", "from": "external.food_energy", "to": "self.energy", "rate": "energy_rate" }
+          ]
+        },
+        { "id": "drink_drive", "op": "clamp", "inputs": ["core.bio.senses/brain.out3", "zero", "one"] },
+        { "id": "dr", "op": "parameter", "name": "drink_rate" },
+        { "id": "d1", "op": "mul", "inputs": ["dr", "size"] },
+        { "id": "drink_rate", "op": "mul", "inputs": ["d1", "drink_drive"] },
+        { "id": "drink", "op": "transfer", "resource": "water", "from": "cell.surface_water", "to": "self.body_water", "rate": "drink_rate" }
+      ],
+      "effects": ["eat", "drink"]
+    },
+    {
+      "rule_id": "core.bio.water_balance",
+      "label": "Body water loss and nutrient excretion",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "water_loss": { "value": 0.012, "unit": "kg/s", "min": 0.0, "max": 100.0, "label": "Body water loss at size 1" },
+        "heat_water_loss": { "value": 2.0, "unit": "1", "min": 0.0, "max": 20.0, "label": "Extra loss under full thermal discomfort" },
+        "excretion": { "value": 0.002, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Nutrient excretion rate", "stability": { "kind": "first_order" } }
+      },
+      "nodes": [
+        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
+        { "id": "size", "op": "trait", "name": "body_size" },
+        { "id": "wcons", "op": "trait", "name": "water_conservation" },
+        { "id": "keep", "op": "sub", "inputs": ["one", "wcons"] },
+        { "id": "hw", "op": "parameter", "name": "heat_water_loss" },
+        { "id": "heat_extra", "op": "mul", "inputs": ["hw", "core.bio.senses/discomfort"] },
+        { "id": "heat_factor", "op": "add", "inputs": ["one", "heat_extra"] },
+        { "id": "wl", "op": "parameter", "name": "water_loss" },
+        { "id": "l1", "op": "mul", "inputs": ["wl", "size"] },
+        { "id": "l2", "op": "mul", "inputs": ["l1", "keep"] },
+        { "id": "loss_rate", "op": "mul", "inputs": ["l2", "heat_factor"] },
+        { "id": "lose_water", "op": "external_sink", "resource": "water", "from": "self.body_water", "account": "external.atmosphere", "rate": "loss_rate" },
+        { "id": "n", "op": "read_state", "field": "self.body_nutrients" },
+        { "id": "ke", "op": "parameter", "name": "excretion" },
+        { "id": "excrete_rate", "op": "mul", "inputs": ["ke", "n"] },
+        { "id": "excrete", "op": "transfer", "resource": "nutrient", "from": "self.body_nutrients", "to": "cell.detritus_nutrients", "rate": "excrete_rate" }
+      ],
+      "effects": ["lose_water", "excrete"]
+    },
+    {
+      "rule_id": "core.bio.health",
+      "label": "Stress and recovery from accepted outcomes",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "recovery": { "value": 0.01, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Recovery rate when fed and hydrated" },
+        "starvation_damage": { "value": 0.02, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Damage while starving" },
+        "dehydration_damage": { "value": 0.03, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Damage while dehydrated" },
+        "heat_damage": { "value": 0.015, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Damage at full thermal discomfort" },
+        "unmet_damage": { "value": 0.05, "unit": "1/s", "min": 0.0, "max": 1.0, "label": "Damage when basal needs are unfunded" }
+      },
+      "nodes": [
+        { "id": "one", "op": "const", "value": 1.0, "unit": "1" },
+        { "id": "low_e", "op": "const", "value": 0.08, "unit": "1" },
+        { "id": "low_w", "op": "const", "value": 0.15, "unit": "1" },
+        { "id": "ok_e", "op": "const", "value": 0.3, "unit": "1" },
+        { "id": "ok_w", "op": "const", "value": 0.4, "unit": "1" },
+        { "id": "zero_rate", "op": "const", "value": 0.0, "unit": "1/s" },
+        { "id": "health", "op": "read_state", "field": "self.health" },
+        { "id": "ef", "op": "as_quantity", "inputs": ["core.bio.senses/energy_frac"] },
+        { "id": "hf", "op": "as_quantity", "inputs": ["core.bio.senses/hydration"] },
+        { "id": "fed", "op": "ge", "inputs": ["ef", "ok_e"] },
+        { "id": "watered", "op": "ge", "inputs": ["hf", "ok_w"] },
+        { "id": "not_full", "op": "lt", "inputs": ["health", "one"] },
+        { "id": "well", "op": "and", "inputs": ["fed", "watered"] },
+        { "id": "recovering", "op": "and", "inputs": ["well", "not_full"] },
+        { "id": "rec_p", "op": "parameter", "name": "recovery" },
+        { "id": "rec", "op": "select", "inputs": ["recovering", "rec_p", "zero_rate"] },
+        { "id": "starving", "op": "lt", "inputs": ["ef", "low_e"] },
+        { "id": "sd", "op": "parameter", "name": "starvation_damage" },
+        { "id": "starve", "op": "select", "inputs": ["starving", "sd", "zero_rate"] },
+        { "id": "dry", "op": "lt", "inputs": ["hf", "low_w"] },
+        { "id": "dd", "op": "parameter", "name": "dehydration_damage" },
+        { "id": "dehydrate", "op": "select", "inputs": ["dry", "dd", "zero_rate"] },
+        { "id": "hd", "op": "parameter", "name": "heat_damage" },
+        { "id": "overheat", "op": "mul", "inputs": ["hd", "core.bio.senses/discomfort"] },
+        { "id": "unfunded", "op": "sub", "inputs": ["one", "core.bio.metabolism/burn.fraction"] },
+        { "id": "ud", "op": "parameter", "name": "unmet_damage" },
+        { "id": "unmet", "op": "mul", "inputs": ["ud", "unfunded"] },
+        { "id": "r1", "op": "sub", "inputs": ["rec", "starve"] },
+        { "id": "r2", "op": "sub", "inputs": ["r1", "dehydrate"] },
+        { "id": "r3", "op": "sub", "inputs": ["r2", "overheat"] },
+        { "id": "rate", "op": "sub", "inputs": ["r3", "unmet"] },
+        { "id": "integrate", "op": "rate_contribution", "field": "self.health", "rate": "rate" }
+      ],
+      "effects": ["integrate"]
+    },
+    {
+      "rule_id": "core.bio.lifecycle",
+      "label": "Death and asexual reproduction",
+      "template": "reproduction",
+      "domain": { "kind": "entities", "archetype": "herbivore" },
+      "parameters": {
+        "birth_share": { "value": 0.4, "unit": "1", "min": 0.05, "max": 0.9, "label": "Share of stores given to offspring" },
+        "birth_energy": { "value": 0.55, "unit": "1", "min": 0.0, "max": 1.0, "label": "Energy fraction required to reproduce" },
+        "birth_hydration": { "value": 0.45, "unit": "1", "min": 0.0, "max": 1.0, "label": "Hydration required to reproduce" },
+        "birth_nutrients": { "value": 0.3, "unit": "kg", "min": 0.0, "max": 1000.0, "label": "Body nutrients required to reproduce" }
+      },
+      "nodes": [
+        { "id": "zero", "op": "const", "value": 0.0, "unit": "1" },
+        { "id": "health", "op": "candidate_state", "field": "self.health" },
+        { "id": "dead_health", "op": "le", "inputs": ["health", "zero"] },
+        { "id": "age", "op": "builtin", "name": "age" },
+        { "id": "max_age", "op": "parameter", "name": "max_age" },
+        { "id": "too_old", "op": "ge", "inputs": ["age", "max_age"] },
+        { "id": "death_old_age", "op": "death", "condition": "too_old", "reason": "old age" },
+        { "id": "death_stress", "op": "death", "condition": "dead_health", "reason": "stress" },
+        { "id": "energy", "op": "candidate_state", "field": "self.energy" },
+        { "id": "water", "op": "candidate_state", "field": "self.body_water" },
+        { "id": "nutr", "op": "candidate_state", "field": "self.body_nutrients" },
+        { "id": "ef", "op": "safe_divide", "inputs": ["energy", "core.bio.capacity/energy_cap", "zero"] },
+        { "id": "hf", "op": "safe_divide", "inputs": ["water", "core.bio.capacity/water_cap", "zero"] },
+        { "id": "be", "op": "parameter", "name": "birth_energy" },
+        { "id": "bh", "op": "parameter", "name": "birth_hydration" },
+        { "id": "bn", "op": "parameter", "name": "birth_nutrients" },
+        { "id": "fed", "op": "ge", "inputs": ["ef", "be"] },
+        { "id": "watered", "op": "ge", "inputs": ["hf", "bh"] },
+        { "id": "nourished", "op": "ge", "inputs": ["nutr", "bn"] },
+        { "id": "mat", "op": "parameter", "name": "maturity_age" },
+        { "id": "mature", "op": "ge", "inputs": ["age", "mat"] },
+        { "id": "want", "op": "gt", "inputs": ["core.bio.senses/brain.out4", "zero"] },
+        { "id": "c1", "op": "and", "inputs": ["fed", "watered"] },
+        { "id": "c2", "op": "and", "inputs": ["c1", "nourished"] },
+        { "id": "c3", "op": "and", "inputs": ["c2", "mature"] },
+        { "id": "can_breed", "op": "and", "inputs": ["c3", "want"] },
+        { "id": "share", "op": "parameter", "name": "birth_share" },
+        { "id": "give_energy", "op": "mul", "inputs": ["energy", "share"] },
+        { "id": "give_water", "op": "mul", "inputs": ["water", "share"] },
+        { "id": "give_nutr", "op": "mul", "inputs": ["nutr", "share"] },
+        {
+          "id": "birth", "op": "birth", "condition": "can_breed",
+          "legs": [
+            { "field": "energy", "amount": "give_energy" },
+            { "field": "body_water", "amount": "give_water" },
+            { "field": "body_nutrients", "amount": "give_nutr" }
+          ]
+        }
+      ],
+      "effects": ["death_old_age", "death_stress", "birth"]
+    }
+  ]
+}

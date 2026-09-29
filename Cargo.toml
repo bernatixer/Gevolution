@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = ["crates/sim_core", "crates/sim_cli", "crates/game_client"]
+default-members = ["crates/sim_core", "crates/sim_cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
+rayon = "1.12.0"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+debug = 1
