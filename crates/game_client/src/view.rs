@@ -798,7 +798,7 @@ pub fn sky(theme: Res<crate::theme::ActiveTheme>, mut clear: ResMut<ClearColor>,
     if !theme.is_changed() {
         return;
     }
-    let c = Color::srgb(theme.1.sky[0], theme.1.sky[1], theme.1.sky[2]);
+    let c = Color::srgb(theme.0.sky[0], theme.0.sky[1], theme.0.sky[2]);
     clear.0 = c;
     for mut f in &mut fog {
         f.color = c;

@@ -3,7 +3,7 @@
 use crate::charts::{self, Series};
 use crate::editor::{self, EditorState};
 use crate::sim::{Snapshot, Speed, ToSim};
-use crate::theme::{self, ActiveTheme, Palette, Theme};
+use crate::theme::{self, ActiveTheme, Palette};
 use crate::view::{Tool, ViewMode, ViewState};
 use crate::{ClientState, SimLink};
 use bevy::prelude::*;
@@ -22,7 +22,7 @@ pub enum Tab {
 pub struct UiState {
     pub tab: Tab,
     pub inspector_open: bool,
-    pub applied_theme: Option<Theme>,
+    pub theme_applied: bool,
     last_selection: (Option<usize>, Option<u64>),
 }
 
@@ -31,7 +31,7 @@ impl Default for UiState {
         UiState {
             tab: Tab::Overview,
             inspector_open: false,
-            applied_theme: None,
+            theme_applied: false,
             last_selection: (None, None),
         }
     }
@@ -133,16 +133,16 @@ pub fn ui_system(
     mut view: ResMut<ViewState>,
     mut uis: ResMut<UiState>,
     mut editor: ResMut<EditorState>,
-    mut active: ResMut<ActiveTheme>,
+    active: Res<ActiveTheme>,
     link: Res<SimLink>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?.clone();
-    if uis.applied_theme != Some(active.0) {
-        theme::apply(&ctx, &active.1);
-        uis.applied_theme = Some(active.0);
+    if !uis.theme_applied {
+        theme::apply(&ctx, &active.0);
+        uis.theme_applied = true;
     }
-    let p = active.1;
+    let p = active.0;
     let Some(s) = state.snapshot.clone() else {
         egui::Window::new("Gevolution").show(&ctx, |ui| ui.label("Growing a world…"));
         return Ok(());
@@ -206,14 +206,6 @@ pub fn ui_system(
                     view.mode = ViewMode::TopDown;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.menu_button("🎨", |ui| {
-                        ui.label(RichText::new("Theme").strong());
-                        for t in Theme::ALL {
-                            if ui.selectable_label(active.0 == t, t.name()).clicked() {
-                                *active = ActiveTheme(t, theme::palette(t));
-                            }
-                        }
-                    });
                     ui.label(RichText::new(format!("🐾 {}", s.population)).size(16.0).color(p.animals));
                 });
             });
@@ -286,29 +278,46 @@ pub fn ui_system(
         (central.width() * sf) as u32,
         (central.height() * sf) as u32,
     ));
-    let hint = match view.tool {
+    let paused = s.speed == Speed::Paused;
+    let hint: Option<String> = match view.tool {
+        _ if paused && s.pending > 0 => Some(format!("{} change(s) waiting: they happen when the world runs", s.pending)),
         Tool::Inspect => None,
-        Tool::AddWater => Some("Hold the mouse on the land to pour water"),
-        Tool::SpawnOrganisms => Some("Click the land to release a small herd"),
+        Tool::AddWater if paused => Some("Paused: pour water now, it arrives when you press Play".into()),
+        Tool::SpawnOrganisms if paused => Some("Paused: place a herd now, it appears when you press Play".into()),
+        Tool::AddWater => Some("Hold the mouse on the land to pour water".into()),
+        Tool::SpawnOrganisms => Some("Click the land to release a small herd".into()),
     };
     if let Some(h) = hint {
         egui::Area::new("tool_hint".into())
-            .fixed_pos(central.center_top() + egui::vec2(-150.0, 12.0))
+            .pivot(egui::Align2::CENTER_TOP)
+            .fixed_pos(central.center_top() + egui::vec2(0.0, 12.0))
             .show(&ctx, |ui| {
                 egui::Frame::new()
                     .fill(p.panel)
-                    .corner_radius(CornerRadius::same(14))
-                    .inner_margin(egui::Margin::symmetric(12, 6))
+                    .corner_radius(CornerRadius::same(16))
+                    .inner_margin(egui::Margin::symmetric(14, 6))
                     .stroke(Stroke::new(1.0, p.border))
                     .show(ui, |ui| {
-                        ui.label(RichText::new(h).color(p.text));
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(h).color(p.text));
+                            if paused {
+                                let b = egui::Button::new(RichText::new("▶ Play").color(p.on_accent))
+                                    .fill(p.accent)
+                                    .corner_radius(CornerRadius::same(14));
+                                if ui.add(b).clicked() {
+                                    send(ToSim::Speed(Speed::X1));
+                                }
+                            }
+                        });
                     });
             });
     }
 
     editor::editor_window(&ctx, &mut editor, &s, &send);
 
-    state.pointer_over_ui = ctx.is_pointer_over_egui() || ctx.egui_wants_pointer_input();
+    // Panels live on the background layer, so test against the viewport rectangle itself.
+    let outside_viewport = ctx.pointer_hover_pos().is_some_and(|pos| !central.contains(pos));
+    state.pointer_over_ui = outside_viewport || ctx.is_pointer_over_egui() || ctx.egui_wants_pointer_input();
     state.keyboard_captured = ctx.egui_wants_keyboard_input();
     Ok(())
 }
@@ -628,14 +637,6 @@ fn row(ui: &mut Ui, p: &Palette, label: &str, value: String) {
     });
 }
 
-const EXPLAIN: [(&str, &str); 5] = [
-    ("surface_water", "Open water"),
-    ("soil_water", "Soil moisture"),
-    ("groundwater", "Groundwater"),
-    ("vegetation_biomass", "Plants"),
-    ("temperature", "Temperature"),
-];
-
 fn inspector(ui: &mut Ui, s: &Snapshot, p: &Palette, view: &mut ViewState, send: &dyn Fn(ToSim)) {
     let Some(c) = view.selected_cell else {
         card(ui, p, |ui| {
@@ -761,65 +762,34 @@ fn inspector(ui: &mut Ui, s: &Snapshot, p: &Palette, view: &mut ViewState, send:
         row(ui, p, "Soil nutrients", format!("{:.0} kg", get("soil_nutrients")));
     });
     card(ui, p, |ui| {
-        ui.label(RichText::new("Why is it changing?").strong());
-        let current = EXPLAIN
-            .iter()
-            .find(|e| e.0 == view.inspect_field)
-            .map(|e| e.1)
-            .unwrap_or("Open water");
-        egui::ComboBox::from_id_salt("explain").selected_text(current).show_ui(ui, |ui| {
-            for (f, l) in EXPLAIN {
-                if ui.selectable_label(view.inspect_field == f, l).clicked() {
-                    view.inspect_field = f.to_string();
-                    send(ToSim::SelectCell(Some(c), f.to_string()));
-                }
-            }
-        });
-        let Some(e) = &s.cell else { return };
-        ui.label(RichText::new("Changes during the last moment (0.25 s):").small().color(p.weak));
-        let mut any = false;
-        for k in &e.contributions {
-            if k.accepted.abs() < 1e-9 {
-                continue;
-            }
-            any = true;
-            let base = k.label.split(" (").next().unwrap_or(&k.label);
-            let short: String = if base.chars().count() > 24 {
-                format!("{}…", base.chars().take(23).collect::<String>())
-            } else {
-                base.to_string()
-            };
-            ui.horizontal(|ui| {
-                let col = if k.accepted > 0.0 { p.accent } else { p.animals };
-                ui.label(RichText::new(if k.accepted > 0.0 { "+" } else { "-" }).color(col).strong());
-                ui.label(short).on_hover_text(if k.min_factor < 1.0 {
-                    format!(
-                        "{}\nOnly {:.0}% of what was asked for was possible{}",
-                        k.label,
-                        k.min_factor * 100.0,
-                        k.limited_by.as_ref().map(|l| format!(" — limited by {l}")).unwrap_or_default()
-                    )
+        ui.label(RichText::new("History of this spot").strong());
+        let h = &s.cell_history;
+        if h.len() < 2 {
+            ui.label(
+                RichText::new(if s.speed == Speed::Paused {
+                    "The world is paused. Press ▶ Play to watch how this spot changes over time."
                 } else {
-                    k.label.clone()
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(RichText::new(format!("{} {}", fmt(k.accepted.abs()), e.unit)).small().monospace());
-                });
-            });
+                    "Recording… the history fills in as time passes."
+                })
+                .color(p.weak),
+            );
+            return;
         }
-        if !any {
-            ui.label(RichText::new("Nothing is changing here right now.").color(p.weak));
-        }
-        if s.cell_history.len() > 1 {
+        for (k, title, color) in [
+            (1, "Water on the surface (mm)", p.water),
+            (2, "Soil moisture (0–1)", p.water),
+            (3, "Plants (kg)", p.plants),
+            (4, "Temperature (°C)", p.animals),
+        ] {
             charts::line_chart(
                 ui,
-                "Recent history",
+                title,
                 &[Series {
                     label: "",
-                    color: p.water,
-                    points: s.cell_history.iter().map(|x| (x.0, x.1)).collect(),
+                    color,
+                    points: h.iter().map(|x| (x[0], x[k])).collect(),
                 }],
-                60.0,
+                48.0,
                 false,
             );
         }

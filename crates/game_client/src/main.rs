@@ -50,6 +50,7 @@ pub struct Script {
     pub tab: Option<String>,
     pub editor_rule: Option<String>,
     pub select_cell: Option<usize>,
+    pub tool: Option<String>,
     done: bool,
     started: bool,
     frames: Vec<f32>,
@@ -96,6 +97,11 @@ fn run_script(
         } else {
             ui::Tab::Overview
         };
+        match script.tool.as_deref() {
+            Some("water") => view.tool = view::Tool::AddWater,
+            Some("animals") => view.tool = view::Tool::SpawnOrganisms,
+            _ => {}
+        }
         if let Some(c) = script.select_cell {
             view.selected_cell = Some(c);
             let _ = link.0.tx.send(sim::ToSim::SelectCell(Some(c), view.inspect_field.clone()));
@@ -158,6 +164,7 @@ fn main() {
             "--tab" => script.tab = Some(next(&mut i)),
             "--editor" => script.editor_rule = Some(next(&mut i)),
             "--select" => script.select_cell = next(&mut i).parse().ok(),
+            "--tool" => script.tool = Some(next(&mut i)),
             a => args.push(a.to_string()),
         }
         i += 1;

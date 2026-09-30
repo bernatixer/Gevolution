@@ -1,31 +1,7 @@
-//! Gevolution's UI themes: friendly, green, low-contrast chrome around the world.
+//! Gevolution's UI theme (Meadow): friendly, green, low-contrast chrome around the world.
 
 use bevy::prelude::Resource;
 use bevy_egui::egui::{self, Color32, CornerRadius, FontFamily, FontId, Margin, Shadow, Stroke, TextStyle, Vec2};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Theme {
-    /// Light and airy: cream paper, leaf-green accents, water-blue details.
-    Meadow,
-    /// Calm teal-green mid tones, like a shaded pond.
-    Lagoon,
-    /// Deep forest greens with fresh lime accents.
-    Grove,
-}
-
-impl Theme {
-    pub const ALL: [Theme; 3] = [Theme::Meadow, Theme::Lagoon, Theme::Grove];
-    pub fn name(&self) -> &'static str {
-        match self {
-            Theme::Meadow => "Meadow",
-            Theme::Lagoon => "Lagoon",
-            Theme::Grove => "Grove",
-        }
-    }
-    pub fn from_name(s: &str) -> Option<Theme> {
-        Theme::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(s))
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
@@ -49,79 +25,36 @@ pub struct Palette {
     pub sky: [f32; 3],
 }
 
-pub fn palette(t: Theme) -> Palette {
+/// The Meadow palette: cream paper, leaf-green accents, water-blue details.
+pub fn meadow() -> Palette {
     let c = Color32::from_rgb;
-    match t {
-        Theme::Meadow => Palette {
-            dark: false,
-            bg: c(244, 247, 236),
-            panel: c(250, 252, 245),
-            card: c(236, 243, 226),
-            field: c(255, 255, 252),
-            text: c(35, 58, 42),
-            weak: c(110, 132, 112),
-            accent: c(62, 155, 90),
-            accent_hover: c(78, 175, 106),
-            on_accent: c(255, 255, 255),
-            soft: c(214, 234, 204),
-            water: c(52, 140, 196),
-            plants: c(76, 160, 70),
-            animals: c(214, 128, 56),
-            warn: c(206, 90, 60),
-            border: c(210, 222, 198),
-            sky: [0.70, 0.83, 0.92],
-        },
-        Theme::Lagoon => Palette {
-            dark: true,
-            bg: c(24, 58, 58),
-            panel: c(30, 70, 68),
-            card: c(38, 84, 80),
-            field: c(22, 52, 52),
-            text: c(232, 246, 238),
-            weak: c(160, 196, 184),
-            accent: c(94, 208, 150),
-            accent_hover: c(120, 224, 170),
-            on_accent: c(16, 48, 40),
-            soft: c(48, 104, 96),
-            water: c(110, 190, 232),
-            plants: c(140, 214, 110),
-            animals: c(244, 176, 102),
-            warn: c(255, 140, 110),
-            border: c(56, 112, 104),
-            sky: [0.60, 0.78, 0.84],
-        },
-        Theme::Grove => Palette {
-            dark: true,
-            bg: c(20, 36, 26),
-            panel: c(26, 46, 33),
-            card: c(34, 58, 42),
-            field: c(18, 32, 23),
-            text: c(230, 242, 224),
-            weak: c(150, 178, 148),
-            accent: c(140, 212, 104),
-            accent_hover: c(164, 228, 126),
-            on_accent: c(20, 40, 22),
-            soft: c(44, 78, 54),
-            water: c(104, 176, 222),
-            plants: c(150, 214, 104),
-            animals: c(236, 170, 92),
-            warn: c(250, 130, 100),
-            border: c(50, 82, 58),
-            sky: [0.62, 0.75, 0.84],
-        },
+    Palette {
+        dark: false,
+        bg: c(244, 247, 236),
+        panel: c(250, 252, 245),
+        card: c(236, 243, 226),
+        field: c(255, 255, 252),
+        text: c(35, 58, 42),
+        weak: c(110, 132, 112),
+        accent: c(62, 155, 90),
+        accent_hover: c(78, 175, 106),
+        on_accent: c(255, 255, 255),
+        soft: c(214, 234, 204),
+        water: c(52, 140, 196),
+        plants: c(76, 160, 70),
+        animals: c(214, 128, 56),
+        warn: c(206, 90, 60),
+        border: c(210, 222, 198),
+        sky: [0.70, 0.83, 0.92],
     }
 }
 
 #[derive(Resource, Clone, Copy)]
-pub struct ActiveTheme(pub Theme, pub Palette);
+pub struct ActiveTheme(pub Palette);
 
 impl Default for ActiveTheme {
     fn default() -> Self {
-        let t = std::env::var("GEVOLUTION_THEME")
-            .ok()
-            .and_then(|s| Theme::from_name(&s))
-            .unwrap_or(Theme::Meadow);
-        ActiveTheme(t, palette(t))
+        ActiveTheme(meadow())
     }
 }
 

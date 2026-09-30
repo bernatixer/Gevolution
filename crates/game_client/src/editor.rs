@@ -24,8 +24,6 @@ pub struct Report {
     pub diagnostics: Vec<Diagnostic>,
     pub types: NodeTypes,
     pub summary: Vec<String>,
-    pub instructions: usize,
-    pub element_ops: u64,
     pub warnings: Vec<String>,
 }
 
@@ -57,6 +55,8 @@ pub struct EditorState {
     new_field: String,
     new_field_unit: String,
     expanded: bool,
+    /// Read (plain-language) or Graph (node editor) view.
+    pub graph_mode: bool,
     pending_select: Option<String>,
     last_scenario_regions: Vec<String>,
     fit_for: Option<(usize, usize)>,
@@ -91,6 +91,7 @@ impl Default for EditorState {
             new_field: "toxin".into(),
             new_field_unit: "kg".into(),
             expanded: true,
+            graph_mode: false,
             pending_select: None,
             last_scenario_regions: vec![],
             fit_for: None,
@@ -268,6 +269,9 @@ impl EditorState {
             self.needs_check = Some(Instant::now());
         }
         self.open = true;
+        if self.sel.is_none() {
+            self.pending_select = Some("core.env.rain".into());
+        }
     }
 
     pub fn select_rule(&mut self, id: &str) {
@@ -359,8 +363,6 @@ impl EditorState {
                     diagnostics: vec![],
                     types,
                     summary,
-                    instructions: plan.instrs.len(),
-                    element_ops: plan.cost.element_ops,
                     warnings: plan.warnings.iter().map(|w| w.to_string()).collect(),
                 }
             }
@@ -369,8 +371,6 @@ impl EditorState {
                 diagnostics: d,
                 types,
                 summary,
-                instructions: 0,
-                element_ops: 0,
                 warnings: vec![],
             },
         });
@@ -422,131 +422,511 @@ pub fn editor_window(ctx: &egui::Context, ed: &mut EditorState, s: &Snapshot, se
         ed.check(s);
     }
     let mut open = true;
-    egui::Window::new("Law editor")
+    egui::Window::new("Laws of nature")
         .open(&mut open)
-        .default_size([1580.0, 900.0])
+        .default_size([1300.0, 820.0])
         .resizable(true)
         .show(ctx, |ui| {
             toolbar(ui, ed, s, send);
-            ui.separator();
+            ui.add_space(4.0);
             egui::Panel::left("ed_rules")
                 .resizable(true)
-                .default_size(230.0)
+                .default_size(250.0)
                 .max_size(420.0)
                 .show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .id_salt("rules_scroll")
-                        .show(ui, |ui| rules_panel(ui, ed, s));
+                    egui::ScrollArea::vertical().id_salt("rules_scroll").show(ui, |ui| {
+                        if ed.graph_mode {
+                            rules_panel(ui, ed, s)
+                        } else {
+                            topic_list(ui, ed)
+                        }
+                    });
                 });
-            egui::Panel::right("ed_props").resizable(true).default_size(330.0).show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .id_salt("props_scroll")
-                    .show(ui, |ui| properties(ui, ed, s));
-            });
-            egui::CentralPanel::default().show(ui, |ui| canvas(ui, ed, s));
+            if ed.graph_mode {
+                egui::Panel::right("ed_props").resizable(true).default_size(330.0).show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("props_scroll")
+                        .show(ui, |ui| properties(ui, ed, s));
+                });
+                egui::CentralPanel::default().show(ui, |ui| canvas(ui, ed, s));
+            } else {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("read_scroll")
+                        .show(ui, |ui| read_view(ui, ed, s));
+                });
+            }
         });
     ed.open = open;
 }
 
 fn toolbar(ui: &mut Ui, ed: &mut EditorState, s: &Snapshot, send: &dyn Fn(ToSim)) {
-    ui.horizontal_wrapped(|ui| {
-        if ui.add_enabled(!ed.undo.is_empty(), egui::Button::new("↶ Undo")).clicked()
+    let accent = ui.visuals().selection.bg_fill;
+    ui.horizontal(|ui| {
+        if ui.add_enabled(!ed.undo.is_empty(), egui::Button::new("Undo")).clicked()
             && let Some(prev) = ed.undo.pop()
         {
             ed.redo.push(std::mem::replace(&mut ed.draft, prev));
             ed.needs_check = Some(Instant::now());
         }
-        if ui.add_enabled(!ed.redo.is_empty(), egui::Button::new("↷ Redo")).clicked()
+        if ui.add_enabled(!ed.redo.is_empty(), egui::Button::new("Redo")).clicked()
             && let Some(next) = ed.redo.pop()
         {
             ed.undo.push(std::mem::replace(&mut ed.draft, next));
             ed.needs_check = Some(Instant::now());
         }
-        if ui.button("Validate").clicked() {
-            ed.check(s);
-        }
+        ui.separator();
+        let changed = ed.draft != ed.base;
         let ok = ed.report.as_ref().is_some_and(|r| r.ok) && ed.needs_check.is_none();
+        let apply = egui::Button::new(RichText::new("✔ Apply changes").color(Color32::WHITE))
+            .fill(accent)
+            .corner_radius(egui::CornerRadius::same(16));
         if ui
-            .add_enabled(ok, egui::Button::new(RichText::new("Apply at next tick boundary").strong()))
-            .on_hover_text("Replaces the active laws atomically; invalid drafts never touch the experiment")
+            .add_enabled(ok && changed, apply)
+            .on_hover_text("Your changes take effect in the running world")
             .clicked()
         {
             send(ToSim::Submit(CommandKind::ApplyPackages {
                 packages: ed.draft.clone(),
             }));
             ed.base = ed.draft.clone();
-            ed.message = "submitted; the change applies at the next tick boundary".into();
+            ed.message = "Applied. Press ▶ Play if the world is paused.".into();
         }
-        if ui.button("Revert to active laws").clicked() {
+        if ui.add_enabled(changed, egui::Button::new("Discard changes")).clicked() {
             ed.edit();
             ed.draft = s.plan.packages.clone();
             ed.base = s.plan.packages.clone();
             ed.base_hash = s.plan.source_hash;
-            ed.sel = None;
         }
         ui.separator();
-        ui.add(egui::TextEdit::singleline(&mut ed.file_path).desired_width(220.0));
-        if ui
-            .button("Save package")
-            .on_hover_text("Saves the package containing the selected rule (or the player package)")
-            .clicked()
-        {
-            let pi = ed
-                .sel
-                .map(|x| x.0)
-                .or_else(|| ed.draft.iter().position(|p| p.package_id == PLAYER_PACKAGE));
-            ed.message = match pi.and_then(|i| ed.draft.get(i)) {
-                Some(p) => {
-                    let path = std::path::PathBuf::from(&ed.file_path);
-                    if let Some(d) = path.parent() {
-                        let _ = std::fs::create_dir_all(d);
-                    }
-                    match std::fs::write(&path, serde_json::to_string_pretty(p).unwrap()) {
-                        Ok(()) => format!("saved {} to {}", p.package_id, path.display()),
-                        Err(e) => format!("save failed: {e}"),
-                    }
-                }
-                None => "select a rule first".into(),
-            };
-        }
-        if ui.button("Load package").clicked() {
-            ed.message = match sim_core::assets::load_package(std::path::Path::new(&ed.file_path)) {
-                Ok(p) => {
-                    ed.edit();
-                    let id = p.package_id.clone();
-                    match ed.draft.iter().position(|x| x.package_id == id) {
-                        Some(i) => ed.draft[i] = p,
-                        None => ed.draft.push(p),
-                    }
-                    format!("loaded {id} into the draft (validate, then apply)")
-                }
-                Err(e) => format!("load failed: {e}"),
-            };
-        }
-        if !ed.message.is_empty() {
-            ui.label(RichText::new(&ed.message).small());
-        }
-    });
-    if let Some(r) = &ed.report {
-        let (color, text) = if ed.needs_check.is_some() {
-            (Color32::GRAY, "checking…".to_string())
-        } else if r.ok {
-            (
-                Color32::from_rgb(110, 200, 120),
-                format!(
-                    "✔ valid draft: {} instructions, ~{:.1} M element-ops per tick (active: {:.1} M)",
-                    r.instructions,
-                    r.element_ops as f64 / 1e6,
-                    s.plan.element_ops as f64 / 1e6
-                ),
-            )
-        } else {
-            (
-                Color32::from_rgb(255, 120, 100),
-                format!("✖ {} error(s); the active laws are unchanged", r.diagnostics.len()),
-            )
+        let status = match &ed.report {
+            _ if ed.needs_check.is_some() => RichText::new("checking…").weak(),
+            Some(r) if !r.ok => {
+                RichText::new(format!("⚠ {} problem(s) to fix before applying", r.diagnostics.len())).color(Color32::from_rgb(200, 90, 60))
+            }
+            _ if changed => RichText::new("Ready to apply").color(accent),
+            _ => RichText::new("No changes").weak(),
         };
-        ui.label(RichText::new(text).color(color));
+        ui.label(status);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.menu_button("Files", |ui| {
+                ui.label(RichText::new("Save or load laws").strong());
+                ui.add(egui::TextEdit::singleline(&mut ed.file_path).desired_width(240.0));
+                if ui.button("Save selected law's package").clicked() {
+                    let pi = ed
+                        .sel
+                        .map(|x| x.0)
+                        .or_else(|| ed.draft.iter().position(|p| p.package_id == PLAYER_PACKAGE));
+                    ed.message = match pi.and_then(|i| ed.draft.get(i)) {
+                        Some(p) => {
+                            let path = std::path::PathBuf::from(&ed.file_path);
+                            if let Some(d) = path.parent() {
+                                let _ = std::fs::create_dir_all(d);
+                            }
+                            match std::fs::write(&path, serde_json::to_string_pretty(p).unwrap()) {
+                                Ok(()) => format!("saved to {}", path.display()),
+                                Err(e) => format!("save failed: {e}"),
+                            }
+                        }
+                        None => "select a law first".into(),
+                    };
+                }
+                if ui.button("Load package").clicked() {
+                    ed.message = match sim_core::assets::load_package(std::path::Path::new(&ed.file_path)) {
+                        Ok(p) => {
+                            ed.edit();
+                            let id = p.package_id.clone();
+                            match ed.draft.iter().position(|x| x.package_id == id) {
+                                Some(i) => ed.draft[i] = p,
+                                None => ed.draft.push(p),
+                            }
+                            format!("loaded {id}")
+                        }
+                        Err(e) => format!("load failed: {e}"),
+                    };
+                }
+            });
+            let label = if ed.graph_mode {
+                "📖 Simple view"
+            } else {
+                "🔧 Graph view (advanced)"
+            };
+            if ui.button(label).clicked() {
+                ed.graph_mode = !ed.graph_mode;
+                ed.expanded = true;
+            }
+        });
+    });
+    if !ed.message.is_empty() {
+        ui.label(RichText::new(&ed.message).small().weak());
+    }
+}
+
+/// Short, friendly name of a rule.
+pub fn short_label(r: &Rule) -> String {
+    let l = if r.label.is_empty() { r.rule_id.clone() } else { r.label.clone() };
+    l.split(" (").next().unwrap_or(&l).split(" with ").next().unwrap_or(&l).to_string()
+}
+
+pub fn topic_of(rule_id: &str) -> &'static str {
+    if rule_id.starts_with("core.bio") {
+        "🐾 Animals"
+    } else if rule_id.contains("vegetation") || rule_id.contains("decomposition") || rule_id.contains("dispersal") {
+        "🌿 Plants"
+    } else if rule_id.contains("temperature") {
+        "☀ Weather"
+    } else if rule_id.starts_with("core.env") {
+        "💧 Water"
+    } else {
+        "✨ Your laws"
+    }
+}
+
+fn topic_list(ui: &mut Ui, ed: &mut EditorState) {
+    let mut select = None;
+    for topic in ["💧 Water", "🌿 Plants", "🐾 Animals", "☀ Weather", "✨ Your laws"] {
+        let items: Vec<(usize, usize, String)> = ed
+            .draft
+            .iter()
+            .enumerate()
+            .flat_map(|(pi, p)| p.rules.iter().enumerate().map(move |(ri, r)| (pi, ri, r)))
+            .filter(|(_, _, r)| topic_of(&r.rule_id) == topic)
+            .map(|(pi, ri, r)| (pi, ri, short_label(r)))
+            .collect();
+        if items.is_empty() {
+            continue;
+        }
+        ui.label(RichText::new(topic).strong());
+        for (pi, ri, l) in items {
+            if ui.selectable_label(ed.sel == Some((pi, ri)), format!("   {l}")).clicked() {
+                select = Some((pi, ri));
+            }
+        }
+        ui.add_space(6.0);
+    }
+    if let Some(x) = select {
+        ed.sel = Some(x);
+        ed.sel_node = None;
+    }
+}
+
+fn humanize(id: &str) -> String {
+    let id = id
+        .strip_prefix("self.")
+        .map(|x| format!("its {x}"))
+        .unwrap_or_else(|| id.strip_prefix("cell.").unwrap_or(id).to_string());
+    id.replace('_', " ")
+}
+
+/// Plain-language reading of a node reference, bounded in depth.
+fn formula(rule: &Rule, all: &[Package], r: &str, depth: u32) -> String {
+    if r.is_empty() {
+        return "(nothing connected)".into();
+    }
+    if depth > 5 {
+        return "…".into();
+    }
+    let (node_part, port) = match r.rsplit_once('.') {
+        Some((n, p)) if !p.contains('/') => (n, p),
+        _ => (r, "value"),
+    };
+    let (rule, id) = match node_part.split_once('/') {
+        Some((rid, nid)) => match all.iter().flat_map(|p| &p.rules).find(|x| x.rule_id == rid) {
+            Some(other) => (other, nid),
+            None => return humanize(nid),
+        },
+        None => (rule, node_part),
+    };
+    let Some(n) = rule.nodes.iter().find(|n| n.id == id) else {
+        return humanize(id);
+    };
+    if is_effect(&n.op) {
+        return match port {
+            "fraction" => format!("the share of \"{}\" that was possible", humanize(id)),
+            _ => format!("what \"{}\" actually moved", humanize(id)),
+        };
+    }
+    if n.op == "brain" {
+        let urges = ["turning", "moving", "eating", "drinking", "breeding", "resting"];
+        let k: usize = port.strip_prefix("out").and_then(|x| x.parse().ok()).unwrap_or(0);
+        return format!("its urge for {}", urges.get(k).unwrap_or(&"acting"));
+    }
+    let arg = |k: &str| n.args.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let ins: Vec<String> = n
+        .args
+        .get("inputs")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().map(|x| x.as_str().unwrap_or("").to_string()).collect())
+        .unwrap_or_default();
+    let child = |k: usize| -> String {
+        let r = ins.get(k).cloned().unwrap_or_default();
+        let t = formula(rule, all, &r, depth + 1);
+        let op = rule
+            .nodes
+            .iter()
+            .find(|x| Some(x.id.as_str()) == r.split('.').next())
+            .map(|x| x.op.as_str())
+            .unwrap_or("");
+        if matches!(op, "add" | "sub") { format!("({t})") } else { t }
+    };
+    match n.op.as_str() {
+        "const" => {
+            let v = n.args.get("value").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let u = arg("unit");
+            if u == "1" || u.is_empty() {
+                trim_num(v)
+            } else {
+                format!("{} {u}", trim_num(v))
+            }
+        }
+        "parameter" => {
+            let name = arg("name");
+            let val = rule
+                .parameters
+                .get(&name)
+                .map(|p| format!(" [{} {}]", trim_num(p.value), p.unit))
+                .unwrap_or_default();
+            format!("{}{val}", humanize(&name))
+        }
+        "read_state" => humanize(&arg("field")),
+        "candidate_state" => format!("{} after this moment", humanize(&arg("field"))),
+        "read_forcing" => humanize(&arg("forcing").replace("rain_flux", "rainfall")),
+        "region" => format!("how much of the spot is inside {}", arg("region")),
+        "cell_area" => "the area of the spot".into(),
+        "cell_size" => "the size of the spot".into(),
+        "is_boundary" => "being at the edge of the world".into(),
+        "random" => "a random number".into(),
+        "trait" => format!("its inherited {}", humanize(&arg("name"))),
+        "builtin" => format!("its {}", arg("name")),
+        "crowding" => "how many neighbours are close".into(),
+        "add" => format!("{} + {}", child(0), child(1)),
+        "sub" => format!("{} − {}", child(0), child(1)),
+        "mul" | "multiply" => format!("{} × {}", child(0), child(1)),
+        "safe_divide" => format!("{} ÷ {}", child(0), child(1)),
+        "neg" => format!("−{}", child(0)),
+        "abs" => format!("the size of {}", child(0)),
+        "min" => format!("the smaller of {} and {}", child(0), child(1)),
+        "max" => format!("the larger of {} and {}", child(0), child(1)),
+        "clamp" => format!("{} kept between {} and {}", child(0), child(1), child(2)),
+        "lerp" => format!("a blend from {} to {} by {}", child(0), child(1), child(2)),
+        "pow" => format!("{} to the power {}", child(0), child(1)),
+        "exp" | "ln" | "sin" | "cos" | "tanh" => format!("{}({})", n.op, child(0)),
+        "curve" => format!("a response curve of {}", child(0)),
+        "as_quantity" => child(0),
+        "lt" => format!("{} < {}", child(0), child(1)),
+        "le" => format!("{} ≤ {}", child(0), child(1)),
+        "gt" => format!("{} > {}", child(0), child(1)),
+        "ge" => format!("{} ≥ {}", child(0), child(1)),
+        "and" => format!("{} and {}", child(0), child(1)),
+        "or" => format!("{} or {}", child(0), child(1)),
+        "not" => format!("not {}", child(0)),
+        "select" => format!("if {} then {} otherwise {}", child(0), child(1), child(2)),
+        "laplacian" => format!("how much {} differs from its neighbours", child(0)),
+        "gradient_x" | "gradient_z" => format!("the slope of {}", child(0)),
+        "neighbor_sum" => format!("{} summed over nearby spots", child(0)),
+        "neighbor_mean" => format!("{} averaged over nearby spots", child(0)),
+        "region_mean" | "region_sum" => format!("{} over region {}", child(0), arg("region")),
+        "edge_from" => format!("{} on one side", child(0)),
+        "edge_to" => format!("{} on the other side", child(0)),
+        "sample" => format!("{} where it stands", child(0)),
+        "sample_offset" => {
+            let f = n.args.get("forward").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let l = n.args.get("lateral").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let dir = if f > 0.0 {
+                "ahead"
+            } else if f < 0.0 {
+                "behind"
+            } else if l > 0.0 {
+                "to its left"
+            } else {
+                "to its right"
+            };
+            format!("{} {dir}", child(0))
+        }
+        op => format!("{op}(…)"),
+    }
+}
+
+/// Things in the world a law reads (state, weather, traits), in plain words.
+fn depends_on(rule: &Rule, all: &[Package], r: &str, out: &mut Vec<String>, depth: u32) {
+    if r.is_empty() || depth > 40 {
+        return;
+    }
+    let node_part = match r.rsplit_once('.') {
+        Some((n, p)) if !p.contains('/') => n,
+        _ => r,
+    };
+    let (rule, id) = match node_part.split_once('/') {
+        Some((rid, nid)) => match all.iter().flat_map(|p| &p.rules).find(|x| x.rule_id == rid) {
+            Some(o) => (o, nid),
+            None => return,
+        },
+        None => (rule, node_part),
+    };
+    let Some(n) = rule.nodes.iter().find(|n| n.id == id) else { return };
+    let arg = |k: &str| n.args.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let mut push = |x: String| {
+        if !out.contains(&x) {
+            out.push(x);
+        }
+    };
+    match n.op.as_str() {
+        "read_state" | "candidate_state" => push(humanize(&arg("field"))),
+        "read_forcing" => push(humanize(&arg("forcing").replace("rain_flux", "rainfall"))),
+        "trait" => push(format!("inherited {}", humanize(&arg("name")))),
+        "builtin" => push(format!("its {}", arg("name"))),
+        "crowding" => push("nearby animals".into()),
+        "region" => push(format!("region {}", arg("region"))),
+        "brain" => push("its brain's decisions".into()),
+        "random" => push("chance".into()),
+        _ => {}
+    }
+    if is_effect(&n.op) || n.op == "brain" {
+        return;
+    }
+    for (_, child) in catalog::node_refs(n) {
+        depends_on(rule, all, &child, out, depth + 1);
+    }
+}
+
+fn trim_num(v: f64) -> String {
+    let s = if v.abs() >= 1000.0 || v == v.trunc() {
+        format!("{v}")
+    } else {
+        format!("{v:.4}")
+    };
+    let s = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    };
+    s
+}
+
+fn place(ep: &str, s: &Snapshot) -> String {
+    if let Some(a) = s.plan.accounts.iter().find(|a| a.0 == ep) {
+        return format!("outside the world ({})", a.2.to_lowercase());
+    }
+    humanize(ep.trim_end_matches("@from").trim_end_matches("@to"))
+}
+
+/// Plain-language view of the selected law: what it does, and the numbers to tune.
+fn read_view(ui: &mut Ui, ed: &mut EditorState, s: &Snapshot) {
+    let Some((pi, ri)) = ed.sel else {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.heading("Pick a law on the left");
+            ui.label(RichText::new("Each law describes one process of nature: rain falling, plants growing, animals eating. Read what it does, then change its numbers.").weak());
+        });
+        return;
+    };
+    let rule = ed.draft[pi].rules[ri].clone();
+    let all = ed.draft.clone();
+    ui.heading(short_label(&rule));
+    ui.label(RichText::new(topic_of(&rule.rule_id)).weak());
+    if let Some(r) = &ed.report {
+        for d in r.diagnostics.iter().filter(|d| d.rule.as_deref() == Some(&rule.rule_id)) {
+            ui.label(RichText::new(format!("⚠ {}", d.message)).color(Color32::from_rgb(200, 90, 60)));
+        }
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new("What it does").strong().size(16.0));
+    let get = |n: &Node, k: &str| n.args.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let effects: Vec<Node> = rule.nodes.iter().filter(|n| is_effect(&n.op)).cloned().collect();
+    if effects.is_empty() {
+        ui.label(RichText::new("This law only works things out for other laws to use (it does not change the world by itself).").weak());
+    }
+    for n in &effects {
+        egui::Frame::new()
+            .fill(ui.visuals().faint_bg_color)
+            .corner_radius(egui::CornerRadius::same(10))
+            .inner_margin(egui::Margin::same(10))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                let refs: Vec<String> = catalog::node_refs(n).into_iter().map(|x| x.1).collect();
+                let headline = match n.op.as_str() {
+                    "transfer" | "external_source" | "external_sink" => {
+                        let from = if n.op == "external_source" {
+                            get(n, "account")
+                        } else {
+                            get(n, "from")
+                        };
+                        let to = if n.op == "external_sink" { get(n, "account") } else { get(n, "to") };
+                        format!("Moves {} from {} to {}", get(n, "resource"), place(&from, s), place(&to, s))
+                    }
+                    "edge_transfer" => format!("Moves {} between neighbouring spots", get(n, "resource")),
+                    "reaction" => {
+                        let legs = n.args.get("legs").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                        let parts: Vec<String> = legs
+                            .iter()
+                            .map(|l| {
+                                let g = |k: &str| l.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                format!("{} from {} to {}", g("resource"), place(&g("from"), s), place(&g("to"), s))
+                            })
+                            .collect();
+                        format!("Together, moves {}", parts.join("; "))
+                    }
+                    "rate_contribution" => format!("Changes {}", humanize(&get(n, "field"))),
+                    "next_value" => format!("Sets {}", humanize(&get(n, "field"))),
+                    "move" => "Moves the animal".into(),
+                    "death" => format!("The animal dies ({})", get(n, "reason")),
+                    "birth" => "A young animal is born".into(),
+                    _ => n.op.clone(),
+                };
+                ui.label(RichText::new(headline).strong());
+                let mut deps = vec![];
+                for r in &refs {
+                    depends_on(&rule, &all, r, &mut deps, 0);
+                }
+                if !deps.is_empty() {
+                    ui.label(RichText::new(format!("Depends on: {}", deps.join(", "))).weak());
+                }
+                egui::CollapsingHeader::new(RichText::new("Formula").small())
+                    .id_salt(("formula", &n.id))
+                    .show(ui, |ui| {
+                        for (port, r) in catalog::node_refs(n) {
+                            let name = match port.as_str() {
+                                "rate" => "per second".to_string(),
+                                "condition" => "when".to_string(),
+                                p if p.starts_with("legs[") => "per second".to_string(),
+                                p => p.to_string(),
+                            };
+                            ui.label(RichText::new(format!("{name}: {}", formula(&rule, &all, &r, 0))).small());
+                        }
+                    });
+            });
+    }
+    ui.add_space(8.0);
+    ui.label(RichText::new("Numbers you can change").strong().size(16.0));
+    if rule.parameters.is_empty() {
+        ui.label(RichText::new("This law has no adjustable numbers. Use the graph view to change its formula.").weak());
+    }
+    let mut changed = None;
+    for (name, pd) in &rule.parameters {
+        let mut v = pd.value;
+        ui.label(RichText::new(if pd.label.is_empty() { humanize(name) } else { pd.label.clone() }).weak());
+        let log = pd.min >= 0.0 && pd.max / pd.min.max(1e-12) > 100.0;
+        if ui
+            .add(
+                egui::Slider::new(&mut v, pd.min..=pd.max)
+                    .logarithmic(log)
+                    .suffix(format!(" {}", pd.unit)),
+            )
+            .changed()
+        {
+            changed = Some((name.clone(), v));
+        }
+    }
+    if let Some((name, v)) = changed {
+        ed.edit();
+        if let Some(pd) = ed.draft[pi].rules[ri].parameters.get_mut(&name) {
+            pd.value = v;
+        }
+    }
+    ui.add_space(12.0);
+    if ui.button("🔧 Change the formula in the graph view").clicked() {
+        ed.graph_mode = true;
+        ed.expanded = true;
     }
 }
 

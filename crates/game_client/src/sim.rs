@@ -133,7 +133,9 @@ pub struct Snapshot {
     pub plan: Arc<PlanInfo>,
     pub cell: Option<CellExplanation>,
     /// Bounded recent history of the selected cell value: (time, value, accepted in, accepted out).
-    pub cell_history: Vec<(f64, f64, f64, f64)>,
+    /// History of the selected spot, one sample per simulated second:
+    /// [time s, surface water mm, soil moisture 0..1, plants kg, temperature °C].
+    pub cell_history: Vec<[f64; 5]>,
     pub entity: Option<EntityExplanation>,
     pub speed: Speed,
     pub ticks_per_second: f64,
@@ -182,7 +184,7 @@ struct Worker {
     current: usize,
     message: Option<String>,
     tick_times: VecDeque<Instant>,
-    cell_history: VecDeque<(f64, f64, f64, f64)>,
+    cell_history: VecDeque<[f64; 5]>,
 }
 
 pub fn spawn(scenario: Scenario, packages: Vec<Package>) -> Result<SimHandle, String> {
@@ -494,18 +496,21 @@ impl Worker {
         let before = self.world.plan().source_hash;
         let r = self.world.step();
         if r.is_ok()
-            && let Some((c, f)) = &self.selected_cell
-            && let Some(e) = self.world.explain_cell(f, *c)
+            && let Some((c, _)) = &self.selected_cell
+            && self.world.tick() % 4 == 0
         {
-            let (i, o) = e.contributions.iter().fold((0.0, 0.0), |(i, o), k| {
-                if k.accepted >= 0.0 {
-                    (i + k.accepted, o)
-                } else {
-                    (i, o - k.accepted)
-                }
-            });
-            self.cell_history.push_back((self.world.time(), e.current, i, o));
-            while self.cell_history.len() > 480 {
+            let w = &self.world;
+            let s = w.schema();
+            let get = |f: &str| s.cell_field(f).map(|i| w.state.cells[i][*c]).unwrap_or(0.0);
+            let cap = get("soil_water_capacity");
+            self.cell_history.push_back([
+                w.time(),
+                get("surface_water") / (w.grid.cell_size * w.grid.cell_size),
+                if cap > 0.0 { get("soil_water") / cap } else { 0.0 },
+                get("vegetation_biomass"),
+                get("temperature") - 273.15,
+            ]);
+            while self.cell_history.len() > 600 {
                 self.cell_history.pop_front();
             }
         }
