@@ -20,15 +20,30 @@ The first client build compiles Bevy, which takes a few minutes.
 
 ## Playing
 
-- **Top bar:** play controls, three tools (🔍 Look, 💧 Water, 🐾 Animals), and the 3D and Map views.
+The world fills the window, and a light HUD floats over it.
+
+- **Top left:** animals, plant cover and open water at a glance. Click a number to show or hide the Overview.
+- **Top centre:** the clock and play speed.
+- **Top right:** the 📊 Overview and 📜 Laws windows, the 3D and Map views, and ⚙ *Under the hood*.
+  - *Under the hood* covers resource budgets, inputs and outputs, events and performance.
+- **Bottom:** the tool dock (🔍 Look, 💧 Water, 🐾 Animals), with a hint for the active tool.
   - Camera controls: right-drag orbits, middle-drag or shift-drag pans, the wheel zooms, WASD moves.
-  - The 🎨 menu switches between the Meadow, Lagoon and Grove themes. Set `GEVOLUTION_THEME` to pick one at startup.
-- **Overview:** animals, plant cover and open water at a glance, how evolution is shifting inherited traits, and collapsed details for budgets and performance.
+- **Overview:** population, water and plant trends, and how evolution is shifting inherited traits.
 - **Laws:** the rules of nature, grouped by topic (Water, Plants, Animals, Weather). Nudge the parameters, or open the law editor to rewrite a formula.
-- **Inspector** (right, collapsible): click the land or an animal with 🔍 Look.
-  - The land here: temperature, water, soil moisture, plants.
-  - *Why is it changing?* shows each law's contribution over the last moment.
+- **Inspector:** opens when you click the land or an animal with 🔍 Look. Collapse it with ▾, or close it with × to clear the selection.
+  - The land here: temperature, water, soil moisture, plants, and the history of that spot.
   - An animal shows its health, energy, water and inherited traits.
+
+The world's look follows the simulation:
+- The ground blends grass, straw, soil, forest floor, mud and rock according to moisture, plant cover, slope and water.
+- Each spot grows the plant that fits it:
+  - forests where biomass is high;
+  - pines up high and in the cold;
+  - autumn colors under drought;
+  - cacti and palms where it is hot and dry;
+  - lilies on deep water.
+- Deer and stags walk, run, eat and drink as they actually do in the simulation.
+- Third-party art is CC0; see `assets/client/ATTRIBUTION.md`.
 
 ### The law editor
 

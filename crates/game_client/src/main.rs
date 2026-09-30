@@ -86,11 +86,11 @@ fn run_script(
         if script.view.as_deref() == Some("top") {
             view.mode = view::ViewMode::TopDown;
         }
-        uis.tab = if script.tab.as_deref() == Some("laws") {
-            ui::Tab::Laws
-        } else {
-            ui::Tab::Overview
-        };
+        match script.tab.as_deref() {
+            Some("laws") => uis.laws_open = true,
+            Some("settings") => uis.settings_open = true,
+            _ => {}
+        }
         match script.tool.as_deref() {
             Some("water") => view.tool = view::Tool::AddWater,
             Some("animals") => view.tool = view::Tool::SpawnOrganisms,

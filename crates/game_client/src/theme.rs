@@ -6,7 +6,6 @@ use bevy_egui::egui::{self, Color32, CornerRadius, FontFamily, FontId, Margin, S
 #[derive(Clone, Copy, Debug)]
 pub struct Palette {
     pub dark: bool,
-    pub bg: Color32,
     pub panel: Color32,
     pub card: Color32,
     pub field: Color32,
@@ -30,7 +29,6 @@ pub fn meadow() -> Palette {
     let c = Color32::from_rgb;
     Palette {
         dark: false,
-        bg: c(244, 247, 236),
         panel: c(250, 252, 245),
         card: c(236, 243, 226),
         field: c(255, 255, 252),

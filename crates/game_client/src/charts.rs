@@ -20,7 +20,7 @@ fn fmt(v: f64) -> String {
 }
 
 /// Line chart with shared x axis (seconds) and a y range from the data.
-pub fn line_chart(ui: &mut Ui, title: &str, series: &[Series], height: f32, zero_based: bool) {
+pub fn line_chart(ui: &mut Ui, title: &str, series: &[Series], height: f32, zero_based: bool, empty: &str) {
     ui.label(egui::RichText::new(title).strong());
     let (resp, painter) = ui.allocate_painter(vec2(ui.available_width(), height), Sense::hover());
     let r = resp.rect;
@@ -30,7 +30,7 @@ pub fn line_chart(ui: &mut Ui, title: &str, series: &[Series], height: f32, zero
         painter.text(
             r.center(),
             egui::Align2::CENTER_CENTER,
-            "gathering data…",
+            empty,
             egui::FontId::proportional(11.0),
             ui.visuals().weak_text_color(),
         );

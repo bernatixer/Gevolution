@@ -1,4 +1,6 @@
-//! Player interface: a calm top bar, an Overview/Laws side panel, and an inspector.
+//! Player interface: the world fills the window; a light HUD floats over it
+//! (glance stats, time, views, tool dock) with Overview, Laws and Inspector as
+//! floating windows and the under-the-hood details in a settings modal.
 
 use crate::charts::{self, Series};
 use crate::editor::{self, EditorState};
@@ -7,33 +9,21 @@ use crate::theme::{self, ActiveTheme, Palette};
 use crate::view::{Tool, ViewMode, ViewState};
 use crate::{ClientState, SimLink};
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use bevy_egui::egui::{self, Color32, CornerRadius, RichText, Stroke};
 use bevy_egui::{EguiContexts, egui::Ui};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Tab {
-    Overview,
-    Laws,
-}
-
 #[derive(Resource)]
 pub struct UiState {
-    pub tab: Tab,
-    pub inspector_open: bool,
+    pub overview_open: bool,
+    pub laws_open: bool,
+    pub settings_open: bool,
     pub theme_applied: bool,
-    last_selection: (Option<usize>, Option<u64>),
 }
 
 impl Default for UiState {
     fn default() -> Self {
-        UiState {
-            tab: Tab::Overview,
-            inspector_open: false,
-            theme_applied: false,
-            last_selection: (None, None),
-        }
+        UiState { overview_open: true, laws_open: false, settings_open: false, theme_applied: false }
     }
 }
 
@@ -104,29 +94,25 @@ fn pill(ui: &mut Ui, p: &Palette, on: bool, label: &str) -> egui::Response {
     ui.add(b)
 }
 
-fn stat(ui: &mut Ui, p: &Palette, color: Color32, value: String, label: &str, sub: String) {
-    egui::Frame::new()
-        .fill(p.card)
-        .corner_radius(CornerRadius::same(12))
-        .inner_margin(egui::Margin::symmetric(12, 8))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(value).size(22.0).strong().color(color));
-                ui.add_space(6.0);
-                ui.vertical(|ui| {
-                    ui.label(RichText::new(label).strong());
-                    ui.label(RichText::new(sub).small().color(p.weak));
-                });
-            });
-        });
-}
-
 fn field_of<'a>(s: &'a Snapshot, name: &str) -> Option<&'a [f32]> {
     s.plan.cell_fields.iter().position(|f| f.0 == name).map(|i| &s.fields[i][..])
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Floating HUD surface: the world stays visible around it.
+fn hud(p: &Palette) -> egui::Frame {
+    egui::Frame::new()
+        .fill(p.panel.gamma_multiply(0.94))
+        .corner_radius(CornerRadius::same(18))
+        .inner_margin(egui::Margin::symmetric(10, 6))
+        .stroke(Stroke::new(1.0, p.border))
+        .shadow(egui::Shadow { offset: [0, 3], blur: 12, spread: 0, color: Color32::from_black_alpha(30) })
+}
+
+fn chip(ui: &mut Ui, color: Color32, value: String, tip: &str) -> egui::Response {
+    let b = egui::Button::new(RichText::new(value).size(15.0).strong().color(color)).frame(false);
+    ui.add(b).on_hover_text(tip)
+}
+
 pub fn ui_system(
     mut contexts: EguiContexts,
     mut state: ResMut<ClientState>,
@@ -135,7 +121,6 @@ pub fn ui_system(
     mut editor: ResMut<EditorState>,
     active: Res<ActiveTheme>,
     link: Res<SimLink>,
-    window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?.clone();
     if !uis.theme_applied {
@@ -147,217 +132,210 @@ pub fn ui_system(
         egui::Window::new("Gevolution").show(&ctx, |ui| ui.label("Growing a world…"));
         return Ok(());
     };
-    if (view.selected_cell, view.selected_entity) != uis.last_selection {
-        uis.last_selection = (view.selected_cell, view.selected_entity);
-        if view.selected_cell.is_some() {
-            uis.inspector_open = true;
-        }
-    }
     let tx = link.0.tx.clone();
     let send = |m: ToSim| {
         let _ = tx.send(m);
     };
-    let mut root = Ui::new(
-        ctx.clone(),
-        "root".into(),
-        egui::UiBuilder::new()
-            .layer_id(egui::LayerId::background())
-            .max_rect(ctx.viewport_rect()),
-    );
+    let screen = ctx.viewport_rect();
+    let paused = s.speed == Speed::Paused;
 
-    // ---- Top bar ----
-    egui::Panel::top("top")
-        .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(14, 8)))
-        .show(&mut root, |ui| {
+    // ---- Top left: name and the world at a glance ----
+    egui::Area::new("hud_left".into()).fixed_pos(screen.min + egui::vec2(12.0, 12.0)).show(&ctx, |ui| {
+        hud(&p).show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("🌱 Gevolution").size(22.0).strong().color(p.accent));
-                ui.add_space(12.0);
-                ui.label(RichText::new(fmt_time(s.time)).monospace().color(p.weak));
+                ui.label(RichText::new("🌱 Gevolution").size(19.0).strong().color(p.accent));
                 ui.add_space(8.0);
-                for (sp, label, tip) in [
-                    (Speed::Paused, "⏸", "Pause"),
-                    (Speed::X1, "▶", "Play"),
-                    (Speed::X10, "⏩", "Fast"),
-                    (Speed::Max, "⏭", "Fastest"),
-                ] {
-                    if pill(ui, &p, s.speed == sp, label).on_hover_text(tip).clicked() {
-                        send(ToSim::Speed(sp));
+                let total = |name: &str| field_of(&s, name).map(|v| v.iter().map(|x| *x as f64).sum::<f64>()).unwrap_or(0.0);
+                let cover = field_of(&s, "vegetation_biomass")
+                    .map(|v| v.iter().map(|b| (*b / (*b + 500.0)) as f64).sum::<f64>() / (s.width * s.height) as f64)
+                    .unwrap_or(0.0);
+                let chips = [
+                    (p.animals, format!("🐾 {}", s.population), "Animals alive"),
+                    (p.plants, format!("🌿 {:.0}%", cover * 100.0), "Share of the land covered by plants"),
+                    (p.water, format!("💧 {} m³", human(total("surface_water") / 1000.0)), "Open water in lakes and rivers"),
+                ];
+                for (c, v, tip) in chips {
+                    if chip(ui, c, v, &format!("{tip}. Click for trends.")).clicked() {
+                        uis.overview_open = !uis.overview_open;
                     }
                 }
-                ui.add_space(16.0);
-                for (t, label, tip) in [
-                    (
-                        Tool::Inspect,
-                        "🔍 Look",
-                        "Click the land or an animal to see what is happening there",
-                    ),
-                    (Tool::AddWater, "💧 Water", "Hold the mouse on the land to pour water"),
-                    (Tool::SpawnOrganisms, "🐾 Animals", "Click the land to release a small herd"),
-                ] {
-                    if pill(ui, &p, view.tool == t, label).on_hover_text(tip).clicked() {
-                        view.tool = t;
+            });
+        });
+    });
+
+    // ---- Top centre: time ----
+    egui::Area::new("hud_time".into())
+        .pivot(egui::Align2::CENTER_TOP)
+        .fixed_pos(egui::pos2(screen.center().x, screen.min.y + 12.0))
+        .show(&ctx, |ui| {
+            hud(&p).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(fmt_time(s.time)).monospace().color(p.weak));
+                    ui.add_space(4.0);
+                    for (sp, label, tip) in
+                        [(Speed::Paused, "⏸", "Pause"), (Speed::X1, "▶", "Play"), (Speed::X10, "⏩", "Fast"), (Speed::Max, "⏭", "Fastest")]
+                    {
+                        if pill(ui, &p, s.speed == sp, label).on_hover_text(tip).clicked() {
+                            send(ToSim::Speed(sp));
+                        }
                     }
-                }
-                ui.add_space(16.0);
-                if pill(ui, &p, view.mode == ViewMode::Orbit, "3D").clicked() {
-                    view.mode = ViewMode::Orbit;
-                }
-                if pill(ui, &p, view.mode == ViewMode::TopDown, "Map").clicked() {
-                    view.mode = ViewMode::TopDown;
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(RichText::new(format!("🐾 {}", s.population)).size(16.0).color(p.animals));
                 });
             });
             if let Some(f) = &s.failure {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new(format!("The world paused: {}", f.message)).color(p.warn).strong());
-                    if ui.button("Resume").clicked() {
-                        send(ToSim::ClearFailure);
-                    }
+                hud(&p).show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(format!("The world paused: {}", f.message)).color(p.warn).strong());
+                        if ui.button("Resume").clicked() {
+                            send(ToSim::ClearFailure);
+                        }
+                    });
                 });
             }
         });
 
-    // ---- Left panel ----
-    egui::Panel::left("left")
-        .resizable(true)
-        .default_size(310.0)
-        .max_size(380.0)
-        .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin::same(12)))
-        .show(&mut root, |ui| {
-            ui.horizontal(|ui| {
-                for (t, l) in [(Tab::Overview, "Overview"), (Tab::Laws, "Laws")] {
-                    if pill(ui, &p, uis.tab == t, l).clicked() {
-                        uis.tab = t;
+    // ---- Top right: views, panels, settings ----
+    egui::Area::new("hud_right".into())
+        .pivot(egui::Align2::RIGHT_TOP)
+        .fixed_pos(egui::pos2(screen.max.x - 12.0, screen.min.y + 12.0))
+        .show(&ctx, |ui| {
+            hud(&p).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if pill(ui, &p, uis.overview_open, "📊 Overview").clicked() {
+                        uis.overview_open = !uis.overview_open;
                     }
-                }
-            });
-            ui.add_space(6.0);
-            egui::ScrollArea::vertical().show(ui, |ui| match uis.tab {
-                Tab::Overview => overview(ui, &s, &p),
-                Tab::Laws => laws(ui, &s, &p, &mut editor, &send),
+                    if pill(ui, &p, uis.laws_open, "📜 Laws").clicked() {
+                        uis.laws_open = !uis.laws_open;
+                    }
+                    ui.separator();
+                    if pill(ui, &p, view.mode == ViewMode::Orbit, "3D").clicked() {
+                        view.mode = ViewMode::Orbit;
+                    }
+                    if pill(ui, &p, view.mode == ViewMode::TopDown, "Map").clicked() {
+                        view.mode = ViewMode::TopDown;
+                    }
+                    ui.separator();
+                    if pill(ui, &p, uis.settings_open, "⚙").on_hover_text("Under the hood: budgets, events, performance").clicked() {
+                        uis.settings_open = !uis.settings_open;
+                    }
+                });
             });
         });
 
-    // ---- Right panel: inspector (collapsible) ----
-    if uis.inspector_open {
-        egui::Panel::right("right")
-            .resizable(true)
-            .default_size(320.0)
-            .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin::same(12)))
-            .show(&mut root, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Inspector").size(18.0).strong());
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("▶").on_hover_text("Hide").clicked() {
-                            uis.inspector_open = false;
-                        }
-                    });
-                });
-                egui::ScrollArea::vertical().show(ui, |ui| inspector(ui, &s, &p, &mut view, &send));
-            });
-    } else {
-        egui::Panel::right("right_min")
-            .resizable(false)
-            .exact_size(40.0)
-            .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin::same(6)))
-            .show(&mut root, |ui| {
-                if ui.button("◀").on_hover_text("Show inspector").clicked() {
-                    uis.inspector_open = true;
-                }
-            });
-    }
-
-    // Remaining area is the 3D viewport.
-    let central = root.available_rect_before_wrap();
-    let paused = s.speed == Speed::Paused;
+    // ---- Bottom centre: tool dock, with a hint above it ----
     let hint: Option<String> = match view.tool {
         _ if paused && s.pending > 0 => Some(format!("{} change(s) waiting: they happen when the world runs", s.pending)),
+        Tool::Inspect if view.selected_cell.is_none() => Some("Click the land or an animal to look closer".into()),
         Tool::Inspect => None,
         Tool::AddWater if paused => Some("Paused: pour water now, it arrives when you press Play".into()),
         Tool::SpawnOrganisms if paused => Some("Paused: place a herd now, it appears when you press Play".into()),
         Tool::AddWater => Some("Hold the mouse on the land to pour water".into()),
         Tool::SpawnOrganisms => Some("Click the land to release a small herd".into()),
     };
-    if let Some(h) = hint {
-        egui::Area::new("tool_hint".into())
-            .pivot(egui::Align2::CENTER_TOP)
-            .fixed_pos(central.center_top() + egui::vec2(0.0, 12.0))
-            .show(&ctx, |ui| {
-                egui::Frame::new()
-                    .fill(p.panel)
-                    .corner_radius(CornerRadius::same(16))
-                    .inner_margin(egui::Margin::symmetric(14, 6))
-                    .stroke(Stroke::new(1.0, p.border))
-                    .show(ui, |ui| {
+    egui::Area::new("dock".into())
+        .pivot(egui::Align2::CENTER_BOTTOM)
+        .fixed_pos(egui::pos2(screen.center().x, screen.max.y - 16.0))
+        .show(&ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                if let Some(h) = hint {
+                    hud(&p).show(ui, |ui| {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(h).color(p.text));
                             if paused {
-                                let b = egui::Button::new(RichText::new("▶ Play").color(p.on_accent))
-                                    .fill(p.accent)
-                                    .corner_radius(CornerRadius::same(14));
+                                let b = egui::Button::new(RichText::new("▶ Play").color(p.on_accent)).fill(p.accent).corner_radius(CornerRadius::same(14));
                                 if ui.add(b).clicked() {
                                     send(ToSim::Speed(Speed::X1));
                                 }
                             }
                         });
                     });
+                    ui.add_space(6.0);
+                }
+                hud(&p).corner_radius(CornerRadius::same(24)).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        for (t, label, tip) in [
+                            (Tool::Inspect, "🔍  Look", "Click the land or an animal to see what is happening there"),
+                            (Tool::AddWater, "💧  Water", "Hold the mouse on the land to pour water"),
+                            (Tool::SpawnOrganisms, "🐾  Animals", "Click the land to release a small herd"),
+                        ] {
+                            let on = view.tool == t;
+                            let b = egui::Button::new(RichText::new(label).size(16.0).color(if on { p.on_accent } else { p.text }))
+                                .fill(if on { p.accent } else { p.soft })
+                                .corner_radius(CornerRadius::same(18))
+                                .min_size(egui::vec2(112.0, 40.0));
+                            if ui.add(b).on_hover_text(tip).clicked() {
+                                view.tool = t;
+                            }
+                        }
+                    });
+                });
             });
+        });
+
+    // ---- Floating windows ----
+    let max_h = (screen.height() - 190.0).max(200.0);
+    egui::Window::new("📊 Overview")
+        .open(&mut uis.overview_open)
+        .default_pos(screen.min + egui::vec2(12.0, 70.0))
+        .default_width(300.0)
+        .resizable(false)
+        .show(&ctx, |ui| egui::ScrollArea::vertical().max_height(max_h).min_scrolled_height(max_h.min(640.0)).show(ui, |ui| overview(ui, &s, &p)));
+    egui::Window::new("📜 Laws")
+        .open(&mut uis.laws_open)
+        .default_pos(screen.min + egui::vec2(330.0, 70.0))
+        .default_width(320.0)
+        .resizable(false)
+        .show(&ctx, |ui| egui::ScrollArea::vertical().max_height(max_h).min_scrolled_height(max_h.min(640.0)).show(ui, |ui| laws(ui, &s, &p, &mut editor, &send)));
+    // The inspector follows the selection; closing it clears the selection, collapsing keeps it.
+    let mut inspecting = view.selected_cell.is_some();
+    if inspecting {
+        egui::Window::new("🔍 Inspector")
+            .open(&mut inspecting)
+            .default_pos(egui::pos2(screen.max.x - 342.0, screen.min.y + 70.0))
+            .default_width(320.0)
+            .resizable(false)
+            .show(&ctx, |ui| egui::ScrollArea::vertical().max_height(max_h).min_scrolled_height(max_h.min(640.0)).show(ui, |ui| inspector(ui, &s, &p, &mut view)));
+        if !inspecting {
+            view.selected_cell = None;
+            view.selected_entity = None;
+            send(ToSim::SelectCell(None, String::new()));
+            send(ToSim::SelectEntity(None));
+        }
+    }
+    if uis.settings_open {
+        let m = egui::Modal::new("settings".into()).show(&ctx, |ui| {
+            ui.set_width(480.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("⚙ Under the hood").size(18.0).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Close").clicked() {
+                        uis.settings_open = false;
+                    }
+                });
+            });
+            ui.label(RichText::new("What the simulation keeps track of behind the scenes.").color(p.weak));
+            ui.add_space(6.0);
+            egui::ScrollArea::vertical().max_height(max_h).show(ui, |ui| details(ui, &s));
+        });
+        if m.should_close() {
+            uis.settings_open = false;
+        }
     }
 
     editor::editor_window(&ctx, &mut editor, &s, &send);
 
-    // Panels live on the background layer, so test against the viewport rectangle itself.
-    let outside_viewport = ctx.pointer_hover_pos().is_some_and(|pos| !central.contains(pos));
-    state.pointer_over_ui = outside_viewport || ctx.is_pointer_over_egui() || ctx.egui_wants_pointer_input();
+    state.pointer_over_ui = ctx.is_pointer_over_egui() || ctx.egui_wants_pointer_input();
     state.keyboard_captured = ctx.egui_wants_keyboard_input();
     Ok(())
 }
 
 fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
-    let cells = (s.width * s.height) as f64;
-    let total = |name: &str| field_of(s, name).map(|v| v.iter().map(|x| *x as f64).sum::<f64>()).unwrap_or(0.0);
-    let water_m3 = total("surface_water") / 1000.0;
-    let veg = field_of(s, "vegetation_biomass");
-    let cover = veg
-        .map(|v| v.iter().map(|b| (*b / (*b + 500.0)) as f64).sum::<f64>() / cells)
-        .unwrap_or(0.0);
-    stat(
-        ui,
-        p,
-        p.animals,
-        s.population.to_string(),
-        "Animals",
-        format!(
-            "{} born · {} died so far",
-            human(s.stats.births as f64),
-            human(s.stats.deaths as f64)
-        ),
-    );
-    stat(
-        ui,
-        p,
-        p.plants,
-        format!("{:.0}%", cover * 100.0),
-        "Plant cover",
-        "of the land is green".into(),
-    );
-    stat(
-        ui,
-        p,
-        p.water,
-        format!("{} m³", human(water_m3)),
-        "Open water",
-        "in lakes and rivers".into(),
-    );
-    ui.add_space(4.0);
+    let empty = if s.speed == Speed::Paused { "Press ▶ Play to start recording" } else { "Recording…" };
     let h = &s.history;
     let t = |x: &sim_core::world::Sample| x.tick as f64 * s.dt;
     card(ui, p, |ui| {
         charts::line_chart(
             ui,
-            "Animals",
+            &format!("Animals · {:.0} born, {:.0} died", s.stats.births as f64, s.stats.deaths as f64),
             &[Series {
                 label: "",
                 color: p.animals,
@@ -365,6 +343,7 @@ fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
             }],
             90.0,
             true,
+            empty,
         );
     });
     let fi = |name: &str| s.plan.cell_fields.iter().position(|f| f.0 == name);
@@ -383,6 +362,7 @@ fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
                 }],
                 70.0,
                 true,
+                empty,
             );
             charts::line_chart(
                 ui,
@@ -397,6 +377,7 @@ fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
                 }],
                 70.0,
                 true,
+                empty,
             );
         });
     }
@@ -443,9 +424,6 @@ fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
             });
         }
     });
-    egui::CollapsingHeader::new(RichText::new("More details").color(p.weak))
-        .id_salt("details")
-        .show(ui, |ui| details(ui, s));
 }
 
 /// (trait id, friendly label) for the first archetype.
@@ -630,25 +608,8 @@ fn row(ui: &mut Ui, p: &Palette, label: &str, value: String) {
     });
 }
 
-fn inspector(ui: &mut Ui, s: &Snapshot, p: &Palette, view: &mut ViewState, send: &dyn Fn(ToSim)) {
-    let Some(c) = view.selected_cell else {
-        card(ui, p, |ui| {
-            ui.label(RichText::new("Nothing selected").strong());
-            ui.label(
-                RichText::new("Pick 🔍 Look in the top bar, then click the land or an animal to see what is happening there.")
-                    .color(p.weak),
-            );
-        });
-        return;
-    };
-    ui.horizontal(|ui| {
-        if ui.button("Clear selection").clicked() {
-            view.selected_cell = None;
-            view.selected_entity = None;
-            send(ToSim::SelectCell(None, String::new()));
-            send(ToSim::SelectEntity(None));
-        }
-    });
+fn inspector(ui: &mut Ui, s: &Snapshot, p: &Palette, view: &mut ViewState) {
+    let Some(c) = view.selected_cell else { return };
     if let Some(o) = &s.entity {
         card(ui, p, |ui| {
             ui.horizontal(|ui| {
@@ -784,6 +745,7 @@ fn inspector(ui: &mut Ui, s: &Snapshot, p: &Palette, view: &mut ViewState, send:
                 }],
                 48.0,
                 false,
+                "",
             );
         }
     });
