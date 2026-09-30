@@ -314,7 +314,6 @@ pub fn ui_system(
 }
 
 fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
-    let area = (s.cell_size * s.cell_size) as f64;
     let cells = (s.width * s.height) as f64;
     let total = |name: &str| field_of(s, name).map(|v| v.iter().map(|x| *x as f64).sum::<f64>()).unwrap_or(0.0);
     let water_m3 = total("surface_water") / 1000.0;
@@ -322,7 +321,6 @@ fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
     let cover = veg
         .map(|v| v.iter().map(|b| (*b / (*b + 500.0)) as f64).sum::<f64>() / cells)
         .unwrap_or(0.0);
-    let _ = area;
     stat(
         ui,
         p,
