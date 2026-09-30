@@ -840,16 +840,46 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
     let drag_from = ed.drag_from.clone();
     let mut new_drag_from = drag_from.clone();
     let sel_node = ed.sel_node.clone();
-    egui::Scene::new().zoom_range(0.2..=2.0).show(ui, &mut scene_rect, |ui| {
-        let painter = ui.painter().clone();
+    // Manual pan/zoom over a painter clipped to the canvas, so nothing spills into side panels.
+    let canvas_rect = ui.available_rect_before_wrap();
+    let bg = ui.interact(canvas_rect, ui.id().with("canvas_bg"), Sense::click_and_drag());
+    {
+        // Keep the visible world rect at the canvas aspect ratio.
+        let aspect = canvas_rect.width() / canvas_rect.height().max(1.0);
+        let c = scene_rect.center();
+        let w = scene_rect.width().max(scene_rect.height() * aspect);
+        scene_rect = Rect::from_center_size(c, vec2(w, w / aspect));
+    }
+    let mut zoom = canvas_rect.width() / scene_rect.width().max(1.0);
+    if bg.dragged_by(egui::PointerButton::Secondary) || bg.dragged_by(egui::PointerButton::Middle) {
+        scene_rect = scene_rect.translate(-bg.drag_delta() / zoom);
+    }
+    if let Some(hp) = bg.hover_pos() {
+        let scroll = ui.ctx().input(|i| i.smooth_scroll_delta.y);
+        if scroll != 0.0 {
+            let f = (1.0 - scroll * 0.002).clamp(0.5, 2.0);
+            let new_w = (scene_rect.width() * f).clamp(200.0, 20000.0);
+            let k = new_w / scene_rect.width();
+            let anchor = scene_rect.min + (hp - canvas_rect.min) / zoom;
+            scene_rect = Rect::from_min_size(anchor + (scene_rect.min - anchor) * k, scene_rect.size() * k);
+            zoom = canvas_rect.width() / scene_rect.width();
+        }
+    }
+    let origin = scene_rect.min;
+    let cmin = canvas_rect.min;
+    let tf = move |p: Pos2| -> Pos2 { cmin + (p - origin) * zoom };
+    let z = zoom;
+    {
+        let painter = ui.painter_at(canvas_rect);
         let text = ui.visuals().text_color();
         let weak = ui.visuals().weak_text_color();
-        let small = egui::FontId::proportional(11.0);
+        let small = egui::FontId::proportional((11.0 * z).max(5.0));
         // Nodes.
         for n in &rule.nodes {
-            let p = positions[&n.id];
-            let h = node_height(n);
-            let rect = Rect::from_min_size(p, vec2(NODE_W, h));
+            let wp = positions[&n.id];
+            let p = tf(wp);
+            let h = node_height(n) * z;
+            let rect = Rect::from_min_size(p, vec2(NODE_W * z, h));
             let diags = node_diags(rep, &rule.rule_id, &n.id);
             let fill = ui.visuals().extreme_bg_color;
             let border = if !diags.is_empty() {
@@ -859,8 +889,8 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
             } else {
                 Stroke::new(1.0, Color32::from_gray(90))
             };
-            painter.rect(rect, 5.0, fill, border, egui::StrokeKind::Inside);
-            let header = Rect::from_min_size(p, vec2(NODE_W, 20.0));
+            painter.rect(rect, 5.0 * z, fill, border, egui::StrokeKind::Inside);
+            let header = Rect::from_min_size(p, vec2(NODE_W * z, 20.0 * z));
             painter.rect_filled(
                 header,
                 egui::CornerRadius {
@@ -872,10 +902,10 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                 category_color(&n.op),
             );
             painter.text(
-                header.left_center() + vec2(6.0, 0.0),
+                header.left_center() + vec2(6.0 * z, 0.0),
                 egui::Align2::LEFT_CENTER,
                 format!("{}  {}", n.op, n.id),
-                egui::FontId::proportional(12.0),
+                egui::FontId::proportional((12.0 * z).max(5.0)),
                 Color32::WHITE,
             );
             let hresp = ui.interact(header, ui.id().with(("hdr", &n.id)), Sense::click_and_drag());
@@ -883,7 +913,7 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                 started_move = Some(n.id.clone());
             }
             if hresp.dragged() {
-                new_pos = Some((n.id.clone(), p + hresp.drag_delta()));
+                new_pos = Some((n.id.clone(), wp + hresp.drag_delta() / z));
             }
             if hresp.clicked() {
                 clicked_node = Some(n.id.clone());
@@ -906,7 +936,8 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
             if !diags.is_empty() {
                 body.on_hover_text(diags.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n"));
             }
-            let mut y = p.y + 22.0;
+            let row = ROW * z;
+            let mut y = p.y + 22.0 * z;
             // Input ports.
             let port_names: Vec<String> = match catalog::info(&n.op).map(|i| i.inputs) {
                 Some(Inputs::Positional(names)) => names.iter().map(|s| s.to_string()).collect(),
@@ -929,13 +960,13 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                 }
             }
             for (k, (pname, target)) in rows.iter().enumerate() {
-                let pp = pos2(p.x, y + ROW / 2.0);
+                let pp = pos2(p.x, y + row / 2.0);
                 let port_diag = diags
                     .iter()
                     .any(|d| d.port.as_deref().is_some_and(|x| x == pname || x == format!("inputs[{k}]")));
                 painter.circle_filled(
                     pp,
-                    4.5,
+                    4.5 * z.max(0.6),
                     if port_diag {
                         Color32::from_rgb(255, 90, 80)
                     } else {
@@ -944,14 +975,14 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                 );
                 let shown = if target.is_empty() { "—".to_string() } else { target.clone() };
                 painter.text(
-                    pp + vec2(8.0, 0.0),
+                    pp + vec2(8.0 * z, 0.0),
                     egui::Align2::LEFT_CENTER,
                     format!("{pname}: {shown}"),
                     small.clone(),
                     if target.is_empty() { Color32::from_rgb(230, 150, 90) } else { text },
                 );
                 inputs_pos.push((n.id.clone(), k, pp));
-                y += ROW;
+                y += row;
             }
             // Scalar args (compact).
             let mut shown_args = 0;
@@ -971,18 +1002,18 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                     other => other.to_string(),
                 };
                 painter.text(
-                    pos2(p.x + 8.0, y + ROW / 2.0),
+                    pos2(p.x + 8.0 * z, y + row / 2.0),
                     egui::Align2::LEFT_CENTER,
                     format!("{k} = {}", truncate(&vs, 26)),
                     small.clone(),
                     weak,
                 );
-                y += ROW;
+                y += row;
                 shown_args += 1;
             }
             if let Some(Value::Array(legs)) = n.args.get("legs") {
                 painter.text(
-                    pos2(p.x + 8.0, y - ROW / 2.0 + 2.0),
+                    pos2(p.x + 8.0 * z, y - row / 2.0 + 2.0 * z),
                     egui::Align2::LEFT_CENTER,
                     format!("{} leg(s)", legs.len()),
                     small.clone(),
@@ -993,9 +1024,9 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
             let outs: Vec<&str> = catalog::info(&n.op).map(|i| i.outputs.to_vec()).unwrap_or(vec!["value"]);
             let types = rep.and_then(|r| r.types.get(&format!("{}/{}", rule.rule_id, n.id)));
             for (k, o) in outs.iter().enumerate() {
-                let pp = pos2(p.x + NODE_W, y + ROW / 2.0);
+                let pp = pos2(p.x + NODE_W * z, y + row / 2.0);
                 let refname = if *o == "value" { n.id.clone() } else { format!("{}.{o}", n.id) };
-                painter.circle_filled(pp, 4.5, Color32::from_rgb(120, 200, 255));
+                painter.circle_filled(pp, 4.5 * z.max(0.6), Color32::from_rgb(120, 200, 255));
                 let label = if is_effect(&n.op) {
                     o.to_string()
                 } else {
@@ -1005,7 +1036,7 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                         .unwrap_or_else(|| "? (unresolved)".into())
                 };
                 painter.text(
-                    pp - vec2(8.0, 0.0),
+                    pp - vec2(8.0 * z, 0.0),
                     egui::Align2::RIGHT_CENTER,
                     truncate(&label, 34),
                     small.clone(),
@@ -1020,7 +1051,7 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                     new_drag_from = Some(refname.clone());
                 }
                 outputs_pos.insert(refname, pp);
-                y += ROW;
+                y += row;
             }
         }
         // Wires to local sources.
@@ -1068,7 +1099,6 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
         if let Some(src) = &drag_from
             && let (Some(a), Some(ptr)) = (outputs_pos.get(src), ui.ctx().pointer_latest_pos())
         {
-            let ptr = ui.ctx().layer_transform_from_global(ui.layer_id()).map(|t| t * ptr).unwrap_or(ptr);
             wire(&painter, *a, ptr, Color32::YELLOW);
             if ui.ctx().input(|i| i.pointer.any_released()) {
                 if let Some((nid, k, _)) = inputs_pos.iter().find(|x| x.2.distance(ptr) < 10.0) {
@@ -1077,7 +1107,7 @@ fn canvas(ui: &mut Ui, ed: &mut EditorState, _s: &Snapshot) {
                 new_drag_from = None;
             }
         }
-    });
+    }
     ed.scene_rect = scene_rect;
     ed.inputs_pos = inputs_pos;
     ed.outputs_pos = outputs_pos;
@@ -1154,8 +1184,8 @@ fn wire(p: &egui::Painter, a: Pos2, b: Pos2, c: Color32) {
 fn combo_str(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &mut String, options: &[String]) -> bool {
     let mut changed = false;
     egui::ComboBox::from_id_salt(id)
-        .selected_text(truncate(value, 30))
-        .width(200.0)
+        .selected_text(truncate(value, 26))
+        .width(ui.available_width().clamp(80.0, 200.0))
         .show_ui(ui, |ui| {
             for o in options {
                 if ui.selectable_label(value == o, o).clicked() {

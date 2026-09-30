@@ -20,22 +20,19 @@ The first client build compiles Bevy, which takes a few minutes.
 
 ## Playing
 
-- **Guide tab:** walks through the seasonal-river scenario. Observe the river, withhold upstream rain, then branch and compare.
-- **Speed:** pause, step, 1×, 10× and max. One tick is 0.25 simulated seconds. The camera never changes the simulation.
-- **3D / Top-down:** switch between the orbit and top-down views and pick an overlay (temperature, water depth, soil moisture, groundwater, vegetation, nutrients, region scope, flow). Every overlay has a legend.
+- **Top bar:** pause, 1×, 10×, max and single step (one tick is 0.25 simulated seconds), plus the 3D and map views.
   - Camera controls: right-drag orbits, middle-drag or shift-drag pans, the wheel zooms, WASD moves.
-- **Inspect:** click a cell or an organism.
-  - A cell shows its values and an *explain-this-value* ledger for the last tick. Each contributing law lists its requested and accepted amounts and what limited it.
-  - An organism shows its current condition separately from its inherited traits, plus its sensed inputs, brain outputs, attempted versus actual actions, and receipts.
-- **Tools:**
-  - Paint region masks, which are scopes and not biomes.
-  - Make explicit interventions: add water or spawn organisms. These are recorded as intervention sources in the ledger.
+- **World tab:** population, water and vegetation over time. Resource budgets, events and performance are collapsible sections.
+- **Lineage tab:** inherited trait distributions, comparing the seed generation with organisms born in the world.
+- **Laws tab:** parameter sliders for values, or **Open law editor** for formulas.
+- **Tools tab:**
+  - Inspect a cell or organism by clicking it.
+  - Paint or erase region masks; the mask being painted is shown on the terrain.
+  - Add water or spawn organisms. These are explicit interventions, recorded in the ledger.
   - Edit parameter fields such as ground permeability.
-- **Laws:** use the parameter sliders for values, or **Open law editor** for formulas.
-- **Experiment:**
-  - Save and load experiments, and create checkpoints.
-  - Branch from a checkpoint with a different command stream.
-  - Compare branches: which laws changed, budgets, population, and trait means.
+- **Inspector (right, collapsible):**
+  - A cell shows its values and an *explain-this-value* ledger for the last tick, with requested versus accepted amounts per law and what limited them.
+  - An organism shows its current condition separately from its inherited traits, plus its senses, brain outputs and actions.
 
 ### The law editor
 

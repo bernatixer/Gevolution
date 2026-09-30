@@ -93,10 +93,9 @@ fn run_script(
         uis.tab = match script.tab.as_deref() {
             Some("world") => ui::Tab::World,
             Some("lineage") => ui::Tab::Lineage,
-            Some("experiment") => ui::Tab::Experiment,
             Some("laws") => ui::Tab::Laws,
             Some("tools") => ui::Tab::Tools,
-            _ => ui::Tab::Guide,
+            _ => ui::Tab::World,
         };
         if let Some(c) = script.select_cell {
             view.selected_cell = Some(c);

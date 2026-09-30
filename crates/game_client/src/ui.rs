@@ -3,7 +3,7 @@
 use crate::charts::{self, PALETTE, Series};
 use crate::editor::{self, EditorState};
 use crate::sim::{Snapshot, Speed, ToSim};
-use crate::view::{Overlay, Ramp, Tool, ViewMode, ViewState, ramp};
+use crate::view::{Overlay, Tool, ViewMode, ViewState};
 use crate::{ClientState, SimLink};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -16,40 +16,41 @@ use sim_core::state::Origin;
 pub enum Tab {
     World,
     Lineage,
-    Experiment,
     Laws,
     Tools,
-    Guide,
 }
 
 #[derive(Resource)]
 pub struct UiState {
     pub tab: Tab,
-    pub save_path: String,
-    pub checkpoint_name: String,
-    pub branch_name: String,
     pub new_region: String,
-    pub guide_step: usize,
     pub param_filter: String,
     pub set_field: String,
     pub set_field_value: f64,
-    pub seed: u64,
+    pub inspector_open: bool,
+    last_selection: (Option<usize>, Option<u64>),
 }
 
 impl Default for UiState {
     fn default() -> Self {
         UiState {
-            tab: Tab::Guide,
-            save_path: "saves/experiment.evw".into(),
-            checkpoint_name: "before change".into(),
-            branch_name: "branch".into(),
+            tab: Tab::World,
             new_region: "my_region".into(),
-            guide_step: 0,
             param_filter: String::new(),
             set_field: "conductance_factor".into(),
             set_field_value: 0.0,
-            seed: 20260929,
+            inspector_open: false,
+            last_selection: (None, None),
         }
+    }
+}
+
+fn fmt_time(t: f64) -> String {
+    let t = t.max(0.0) as u64;
+    if t >= 3600 {
+        format!("{}h {:02}m {:02}s", t / 3600, t / 60 % 60, t % 60)
+    } else {
+        format!("{:02}m {:02}s", t / 60, t % 60)
     }
 }
 
@@ -66,26 +67,6 @@ fn fmt(v: f64) -> String {
     } else {
         format!("{v:.4}")
     }
-}
-
-fn legend(ui: &mut Ui, overlay: Overlay) {
-    let Some((lo, hi, r)) = overlay.legend() else { return };
-    ui.label(RichText::new(lo).small());
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(110.0, 12.0), egui::Sense::hover());
-    let p = ui.painter();
-    for i in 0..22 {
-        let t = i as f32 / 21.0;
-        let c = ramp(r, t);
-        let x0 = rect.left() + rect.width() * i as f32 / 22.0;
-        let col = Color32::from_rgb((c[0] * 255.0) as u8, (c[1] * 255.0) as u8, (c[2] * 255.0) as u8);
-        p.rect_filled(
-            egui::Rect::from_min_size(egui::pos2(x0, rect.top()), egui::vec2(rect.width() / 22.0 + 0.5, rect.height())),
-            0.0,
-            col,
-        );
-    }
-    ui.label(RichText::new(hi).small());
-    let _ = Ramp::Blues;
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -108,6 +89,18 @@ pub fn ui_system(
     {
         view.region = r.clone();
     }
+    // Terrain always shows the natural look; region painting reveals the mask being painted.
+    view.overlay = if matches!(view.tool, Tool::PaintRegion | Tool::EraseRegion) {
+        Overlay::Region
+    } else {
+        Overlay::Natural
+    };
+    if (view.selected_cell, view.selected_entity) != uis.last_selection {
+        uis.last_selection = (view.selected_cell, view.selected_entity);
+        if view.selected_cell.is_some() {
+            uis.inspector_open = true;
+        }
+    }
     let tx = link.0.tx.clone();
     let send = |m: ToSim| {
         let _ = tx.send(m);
@@ -124,43 +117,25 @@ pub fn ui_system(
     egui::Panel::top("top").show(&mut root, |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.heading("Evolving Worlds");
-            ui.label(RichText::new(&s.plan.scenario.label).italics());
             ui.separator();
-            ui.monospace(format!("t = {:>8.1} s  tick {}", s.time, s.tick));
-            let rate = s.ticks_per_second * s.dt;
-            ui.label(RichText::new(format!("{:.1} ticks/s ≈ {:.1}×", s.ticks_per_second, rate)).small());
+            ui.monospace(format!("{}", fmt_time(s.time)));
             ui.separator();
             for (sp, label, tip) in [
-                (Speed::Paused, "⏸ Pause", "Pause the experiment"),
-                (Speed::X1, "▶ 1×", "Real time: 4 ticks per second"),
-                (Speed::X10, "⏩ 10×", "40 ticks per second"),
+                (Speed::Paused, "⏸", "Pause"),
+                (Speed::X1, "▶ 1×", "Real time"),
+                (Speed::X10, "⏩ 10×", "Ten times faster"),
                 (Speed::Max, "⏭ Max", "As fast as possible"),
             ] {
                 if ui.selectable_label(s.speed == sp, label).on_hover_text(tip).clicked() {
                     send(ToSim::Speed(sp));
                 }
             }
-            if ui.button("Step").on_hover_text("Advance exactly one tick (0.25 s)").clicked() {
+            if ui.button("Step").on_hover_text("Advance one tick (0.25 s)").clicked() {
                 send(ToSim::Step(1));
-            }
-            if ui.button("+40").on_hover_text("Advance 40 ticks (10 s)").clicked() {
-                send(ToSim::Step(40));
             }
             ui.separator();
             ui.selectable_value(&mut view.mode, ViewMode::Orbit, "3D");
-            ui.selectable_value(&mut view.mode, ViewMode::TopDown, "Top-down");
-            let before = view.overlay;
-            egui::ComboBox::from_id_salt("overlay")
-                .selected_text(view.overlay.label())
-                .show_ui(ui, |ui| {
-                    for o in Overlay::ALL {
-                        ui.selectable_value(&mut view.overlay, o, o.label());
-                    }
-                });
-            if before != view.overlay {
-                send(ToSim::WantFlow(view.overlay == Overlay::Flow));
-            }
-            legend(ui, view.overlay);
+            ui.selectable_value(&mut view.mode, ViewMode::TopDown, "Map");
             ui.separator();
             ui.label(format!("population {}", s.population));
             if s.pending > 0 {
@@ -189,13 +164,11 @@ pub fn ui_system(
     });
 
     // ---- Left panel ----
-    egui::Panel::left("left").resizable(true).default_size(390.0).show(&mut root, |ui| {
+    egui::Panel::left("left").resizable(true).default_size(330.0).show(&mut root, |ui| {
         ui.horizontal_wrapped(|ui| {
             for (t, l) in [
-                (Tab::Guide, "Guide"),
                 (Tab::World, "World"),
                 (Tab::Lineage, "Lineage"),
-                (Tab::Experiment, "Experiment"),
                 (Tab::Laws, "Laws"),
                 (Tab::Tools, "Tools"),
             ] {
@@ -206,20 +179,38 @@ pub fn ui_system(
         egui::ScrollArea::vertical().show(ui, |ui| match uis.tab {
             Tab::World => world_tab(ui, &s),
             Tab::Lineage => lineage_tab(ui, &s),
-            Tab::Experiment => experiment_tab(ui, &s, &mut uis, &send),
             Tab::Laws => laws_tab(ui, &s, &mut uis, &mut editor, &send),
             Tab::Tools => tools_tab(ui, &s, &mut view, &mut uis, &send),
-            Tab::Guide => guide_tab(ui, &s, &mut uis, &mut editor, &mut view),
         });
     });
 
-    // ---- Right panel: inspector ----
-    egui::Panel::right("right")
-        .resizable(true)
-        .default_size(360.0)
-        .show(&mut root, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| inspector(ui, &s, &mut view, &send));
-        });
+    // ---- Right panel: inspector (collapsible) ----
+    if uis.inspector_open {
+        egui::Panel::right("right")
+            .resizable(true)
+            .default_size(340.0)
+            .show(&mut root, |ui| {
+                ui.horizontal(|ui| {
+                    ui.heading("Inspector");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button("▶").on_hover_text("Minimize").clicked() {
+                            uis.inspector_open = false;
+                        }
+                    });
+                });
+                egui::ScrollArea::vertical().show(ui, |ui| inspector(ui, &s, &mut view, &send));
+            });
+    } else {
+        egui::Panel::right("right_min")
+            .resizable(false)
+            .exact_size(34.0)
+            .show(&mut root, |ui| {
+                if ui.button("◀").on_hover_text("Show inspector").clicked() {
+                    uis.inspector_open = true;
+                }
+                ui.label(RichText::new("I\nn\ns\np\ne\nc\nt").small().weak());
+            });
+    }
 
     // Remaining area is the 3D viewport.
     let central = root.available_rect_before_wrap();
@@ -239,54 +230,12 @@ pub fn ui_system(
 }
 
 fn world_tab(ui: &mut Ui, s: &Snapshot) {
-    ui.heading("Resource budgets");
-    ui.label(
-        RichText::new("Tracked totals follow total_next = total_now + explicit external inputs − outputs. Errors are unexplained drift.")
-            .small(),
-    );
-    egui::Grid::new("ledger").striped(true).show(ui, |ui| {
-        ui.strong("resource");
-        ui.strong("total");
-        ui.strong("tick error / tol.");
-        ui.strong("cumulative err.");
-        ui.end_row();
-        for l in &s.ledger {
-            ui.label(&l.resource);
-            ui.monospace(fmt(l.total));
-            ui.monospace(format!("{} / {}", fmt(l.last_tick_error), fmt(l.last_tolerance)));
-            ui.monospace(fmt(l.cumulative_error));
-            ui.end_row();
-        }
-    });
-    ui.collapsing("External accounts (open boundaries and toy exchanges)", |ui| {
-        egui::Grid::new("accounts").striped(true).show(ui, |ui| {
-            ui.strong("account");
-            ui.strong("in");
-            ui.strong("out");
-            ui.end_row();
-            for (id, res, label, i, o) in &s.accounts {
-                ui.label(format!("{id} ({res})")).on_hover_text(label);
-                ui.monospace(fmt(*i));
-                ui.monospace(fmt(*o));
-                ui.end_row();
-            }
-            for (r, i, o, ro) in &s.interventions {
-                if *i != 0.0 || *o != 0.0 {
-                    ui.label(format!("interventions ({r})"));
-                    ui.monospace(fmt(*i));
-                    ui.monospace(fmt(*o));
-                    ui.end_row();
-                }
-                if *ro != 0.0 {
-                    ui.label(format!("roundoff corrections ({r})"));
-                    ui.monospace(fmt(*ro));
-                    ui.label("");
-                    ui.end_row();
-                }
-            }
-        });
-    });
-    ui.separator();
+    ui.heading("World");
+    let alive: usize = s.entities.iter().map(|e| e.len()).sum();
+    ui.label(format!(
+        "{alive} organisms alive · {} born · {} died",
+        s.stats.births, s.stats.deaths
+    ));
     let h = &s.history;
     let series = |idx: usize| -> Vec<(f64, f64)> {
         h.iter()
@@ -347,10 +296,6 @@ fn world_tab(ui: &mut Ui, s: &Snapshot) {
         90.0,
         true,
     );
-    ui.label(format!(
-        "births {}   deaths {}   cap rejections {}",
-        s.stats.births, s.stats.deaths, s.stats.cap_rejections
-    ));
     if !s.stats.deaths_by_reason.is_empty() {
         ui.label(format!(
             "death reasons: {}",
@@ -367,6 +312,56 @@ fn world_tab(ui: &mut Ui, s: &Snapshot) {
             ui.label(RichText::new(format!("range diagnostic: {n} cells of {f} outside declared range")).color(Color32::YELLOW));
         }
     }
+    ui.collapsing("Resource budgets", |ui| {
+        ui.label(
+            RichText::new(
+                "Tracked totals follow total_next = total_now + explicit external inputs − outputs. Errors are unexplained drift.",
+            )
+            .small(),
+        );
+        egui::Grid::new("ledger").striped(true).show(ui, |ui| {
+            ui.strong("resource");
+            ui.strong("total");
+            ui.strong("tick error / tol.");
+            ui.strong("cumulative err.");
+            ui.end_row();
+            for l in &s.ledger {
+                ui.label(&l.resource);
+                ui.monospace(fmt(l.total));
+                ui.monospace(format!("{} / {}", fmt(l.last_tick_error), fmt(l.last_tolerance)));
+                ui.monospace(fmt(l.cumulative_error));
+                ui.end_row();
+            }
+        });
+        ui.collapsing("External accounts (open boundaries and toy exchanges)", |ui| {
+            egui::Grid::new("accounts").striped(true).show(ui, |ui| {
+                ui.strong("account");
+                ui.strong("in");
+                ui.strong("out");
+                ui.end_row();
+                for (id, res, label, i, o) in &s.accounts {
+                    ui.label(format!("{id} ({res})")).on_hover_text(label);
+                    ui.monospace(fmt(*i));
+                    ui.monospace(fmt(*o));
+                    ui.end_row();
+                }
+                for (r, i, o, ro) in &s.interventions {
+                    if *i != 0.0 || *o != 0.0 {
+                        ui.label(format!("interventions ({r})"));
+                        ui.monospace(fmt(*i));
+                        ui.monospace(fmt(*o));
+                        ui.end_row();
+                    }
+                    if *ro != 0.0 {
+                        ui.label(format!("roundoff corrections ({r})"));
+                        ui.monospace(fmt(*ro));
+                        ui.label("");
+                        ui.end_row();
+                    }
+                }
+            });
+        });
+    });
     ui.collapsing("Recent events", |ui| {
         for e in &s.events {
             ui.label(RichText::new(format!("{:>7} {:?}", e.tick, e.kind)).small().monospace());
@@ -460,144 +455,6 @@ fn lineage_tab(ui: &mut Ui, s: &Snapshot) {
                 false,
             );
         }
-    }
-}
-
-fn experiment_tab(ui: &mut Ui, s: &Snapshot, uis: &mut UiState, send: &dyn Fn(ToSim)) {
-    ui.heading("Save and load");
-    ui.horizontal(|ui| {
-        ui.text_edit_singleline(&mut uis.save_path);
-    });
-    ui.horizontal(|ui| {
-        if ui.button("Save").clicked() {
-            send(ToSim::Save(uis.save_path.clone().into()));
-        }
-        if ui.button("Load").clicked() {
-            send(ToSim::Load(uis.save_path.clone().into()));
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("New world, seed");
-        ui.add(egui::DragValue::new(&mut uis.seed));
-        if ui.button("Generate").clicked() {
-            let mut sc = s.plan.scenario.clone();
-            sc.seed = uis.seed;
-            let root = sim_core::assets::asset_root().join("rules");
-            let pkgs: Result<Vec<_>, _> = sc.packages.iter().map(|p| sim_core::assets::load_package(&root.join(p))).collect();
-            if let Ok(p) = pkgs {
-                send(ToSim::Restart(Box::new(sc), p));
-            }
-        }
-    });
-    ui.separator();
-    ui.heading("Checkpoints and branches");
-    ui.label(RichText::new("A branch restarts from a checkpoint with a different subsequent command stream. Undoing an edit never rewinds the world; branching does.").small());
-    ui.horizontal(|ui| {
-        ui.text_edit_singleline(&mut uis.checkpoint_name);
-        if ui.button("Checkpoint now").clicked() {
-            send(ToSim::Checkpoint(uis.checkpoint_name.clone()));
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("branch name");
-        ui.text_edit_singleline(&mut uis.branch_name);
-    });
-    for (i, c) in s.checkpoints.iter().enumerate() {
-        ui.horizontal(|ui| {
-            let branch = s
-                .branches
-                .iter()
-                .find(|b| b.index == c.branch)
-                .map(|b| b.name.clone())
-                .unwrap_or_default();
-            ui.label(format!("◆ {} (tick {}, on {branch})", c.name, c.tick));
-            if ui.button("Branch from here").clicked() {
-                send(ToSim::BranchFrom(i, format!("{} #{}", uis.branch_name, s.branches.len() + 1)));
-            }
-        });
-    }
-    ui.separator();
-    ui.heading("Compare branches");
-    egui::Grid::new("branches").striped(true).show(ui, |ui| {
-        ui.strong("branch");
-        ui.strong("from");
-        ui.strong("time");
-        ui.strong("pop.");
-        ui.strong("");
-        ui.end_row();
-        for (i, b) in s.branches.iter().enumerate() {
-            ui.label(if i == 0 {
-                RichText::new(format!("● {}", b.name)).strong()
-            } else {
-                RichText::new(&b.name)
-            });
-            ui.label(b.from_checkpoint.clone().unwrap_or("—".into()));
-            ui.label(format!("{:.0} s", b.time));
-            ui.label(b.population.to_string());
-            if i > 0 {
-                if ui.button("Switch").clicked() {
-                    send(ToSim::SwitchBranch(b.index));
-                }
-            } else {
-                ui.label("(active)");
-            }
-            ui.end_row();
-        }
-    });
-    for b in &s.branches {
-        ui.collapsing(format!("{} — details", b.name), |ui| {
-            ui.label(format!(
-                "seed {}   elapsed {:.0} s   births {}   deaths {}",
-                b.seed, b.time, b.births, b.deaths
-            ));
-            ui.label(if b.rules_changed.is_empty() {
-                "laws: unchanged from its checkpoint".to_string()
-            } else {
-                format!("laws changed: {}", b.rules_changed.join(", "))
-            });
-            for (r, t) in &b.resource_totals {
-                ui.monospace(format!("{r:>9}: {}", fmt(*t)));
-            }
-            for (f, t) in &b.field_totals {
-                ui.monospace(format!("{f:>20}: {}", fmt(*t)));
-            }
-            for (t, m) in &b.trait_means {
-                ui.monospace(format!("{t:>34}: {}", fmt(*m)));
-            }
-        });
-    }
-    let series: Vec<Series> = s
-        .branches
-        .iter()
-        .enumerate()
-        .map(|(i, b)| Series {
-            label: &b.name,
-            color: PALETTE[i % PALETTE.len()],
-            points: b
-                .history
-                .iter()
-                .map(|x| (x.tick as f64 * s.dt, x.population.iter().sum::<usize>() as f64))
-                .collect(),
-        })
-        .collect();
-    charts::line_chart(ui, "Population by branch", &series, 100.0, true);
-    let fi = s.plan.cell_fields.iter().position(|f| f.0 == "surface_water");
-    if let Some(fi) = fi {
-        let series: Vec<Series> = s
-            .branches
-            .iter()
-            .enumerate()
-            .map(|(i, b)| Series {
-                label: &b.name,
-                color: PALETTE[i % PALETTE.len()],
-                points: b
-                    .history
-                    .iter()
-                    .map(|x| (x.tick as f64 * s.dt, x.field_totals.get(fi).copied().unwrap_or(f64::NAN)))
-                    .collect(),
-            })
-            .collect();
-        charts::line_chart(ui, "Surface water by branch (kg)", &series, 100.0, true);
     }
 }
 
@@ -724,76 +581,9 @@ fn tools_tab(ui: &mut Ui, s: &Snapshot, view: &mut ViewState, uis: &mut UiState,
         ui.label(RichText::new("select a cell first").small());
     }
     ui.separator();
-    ui.checkbox(&mut view.show_water, "show water surface");
-    ui.checkbox(&mut view.show_vegetation, "show vegetation");
-    ui.checkbox(&mut view.show_organisms, "show organisms");
-    ui.add(egui::Slider::new(&mut view.vertical_scale, 0.5..=6.0).text("vertical exaggeration"));
-    ui.label(RichText::new("Camera: right-drag orbit, middle-drag or shift+drag pan, wheel zoom, WASD move. Camera and overlays never change the simulation.").small());
-}
-
-fn guide_tab(ui: &mut Ui, s: &Snapshot, uis: &mut UiState, editor: &mut EditorState, view: &mut ViewState) {
-    ui.heading(&s.plan.scenario.label);
-    let guide = &s.plan.scenario.guide;
-    if guide.is_empty() {
-        ui.label("This scenario has no guide.");
-        return;
-    }
-    for (i, g) in guide.iter().enumerate() {
-        let active = i == uis.guide_step;
-        egui::Frame::group(ui.style())
-            .fill(if active {
-                ui.visuals().faint_bg_color
-            } else {
-                Color32::TRANSPARENT
-            })
-            .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}. {}", i + 1, g.title)).strong());
-                    if !active && ui.small_button("go").clicked() {
-                        uis.guide_step = i;
-                    }
-                });
-                if active {
-                    ui.label(&g.body);
-                    ui.horizontal(|ui| {
-                        match i {
-                            0 => {
-                                if ui.button("Show surface water").clicked() {
-                                    view.overlay = Overlay::SurfaceWater;
-                                }
-                                if ui.button("Show flow").clicked() {
-                                    view.overlay = Overlay::Flow;
-                                }
-                            }
-                            1 => {
-                                if ui.button("Edit the rainfall law").clicked() {
-                                    editor.open(s);
-                                    editor.select_rule("core.env.rain");
-                                }
-                                if ui.button("Show 'upstream' region").clicked() {
-                                    view.overlay = Overlay::Region;
-                                    view.region = "upstream".into();
-                                }
-                            }
-                            3 if ui.button("Edit water balance").clicked() => {
-                                editor.open(s);
-                                editor.select_rule("core.bio.water_balance");
-                            }
-                            _ => {}
-                        }
-                        if i + 1 < guide.len() && ui.button("Next").clicked() {
-                            uis.guide_step = i + 1;
-                        }
-                    });
-                }
-            });
-    }
-    ui.separator();
-    ui.label(RichText::new("The guide supplies starting conditions and explanations. Outcomes such as drying, recovery, migration, or adaptation are not scripted and may not happen in every run.").small());
 }
 
 fn inspector(ui: &mut Ui, s: &Snapshot, view: &mut ViewState, send: &dyn Fn(ToSim)) {
-    ui.heading("Inspector");
     let Some(c) = view.selected_cell else {
         ui.label("Select a cell or organism with the Inspect tool.");
         return;
@@ -831,7 +621,13 @@ fn inspector(ui: &mut Ui, s: &Snapshot, view: &mut ViewState, send: &dyn Fn(ToSi
             ui.label("");
             ui.end_row();
             for k in &e.contributions {
-                ui.label(&k.label).on_hover_text(format!("effect {} of rule {}", k.effect, k.rule));
+                let short: String = if k.label.chars().count() > 30 {
+                    format!("{}…", k.label.chars().take(30).collect::<String>())
+                } else {
+                    k.label.clone()
+                };
+                ui.label(short)
+                    .on_hover_text(format!("{}\neffect {} of rule {}", k.label, k.effect, k.rule));
                 ui.monospace(format!("{:+}", Fmt(k.accepted)));
                 let lim = if k.min_factor < 1.0 {
                     format!(

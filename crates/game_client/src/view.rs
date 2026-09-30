@@ -56,21 +56,6 @@ impl Overlay {
             Overlay::Flow => "Flow direction",
         }
     }
-    /// (legend low label, high label, colormap)
-    pub fn legend(&self) -> Option<(&'static str, &'static str, Ramp)> {
-        Some(match self {
-            Overlay::Natural => return None,
-            Overlay::Elevation => ("low", "high", Ramp::Terrain),
-            Overlay::Temperature => ("270 K", "310 K", Ramp::Diverging),
-            Overlay::SurfaceWater => ("1 mm", "5 m (log)", Ramp::Blues),
-            Overlay::SoilMoisture => ("dry", "at capacity", Ramp::Moisture),
-            Overlay::Groundwater => ("0 kg", "10 t", Ramp::Blues),
-            Overlay::Vegetation => ("0 kg", "3 t per cell", Ramp::Greens),
-            Overlay::Nutrients => ("0 kg", "150 kg per cell", Ramp::Purples),
-            Overlay::Region => ("outside", "inside", Ramp::Orange),
-            Overlay::Flow => ("still", "fast (log)", Ramp::Blues),
-        })
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -207,8 +192,9 @@ pub struct Scene3d {
     water: Option<Handle<Mesh>>,
     lit: Option<Handle<StandardMaterial>>,
     unlit: Option<Handle<StandardMaterial>>,
-    plant_mesh: Option<Handle<Mesh>>,
-    plant_mat: Option<Handle<StandardMaterial>>,
+    plant_meshes: Vec<Handle<Mesh>>,
+    plant_mats: Vec<Handle<StandardMaterial>>,
+    slope: Vec<f32>,
     organism_mesh: Option<Handle<Mesh>>,
     organism_mats: Vec<Handle<StandardMaterial>>,
     organisms: HashMap<u64, Entity>,
@@ -264,6 +250,14 @@ pub fn setup(
             ..default()
         }),
         Transform::from_xyz(0.0, 3000.0, 3000.0).looking_at(Vec3::ZERO, Vec3::Y),
+        bevy::pbr::DistanceFog {
+            color: SKY,
+            falloff: bevy::pbr::FogFalloff::Linear {
+                start: 3500.0,
+                end: 14000.0,
+            },
+            ..default()
+        },
     ));
     if let Some(t) = &target {
         world_cam.insert(bevy::camera::RenderTarget::Image(t.clone().into()));
@@ -271,18 +265,125 @@ pub fn setup(
     }
     commands.spawn((
         DirectionalLight {
-            illuminance: 12000.0,
-            shadow_maps_enabled: false,
+            illuminance: 10000.0,
+            color: Color::srgb(1.0, 0.96, 0.88),
+            shadow_maps_enabled: true,
             ..default()
         },
-        Transform::from_xyz(-1.0, 1.0, 0.6).looking_at(Vec3::ZERO, Vec3::Y),
+        bevy::light::CascadeShadowConfigBuilder {
+            num_cascades: 3,
+            first_cascade_far_bound: 900.0,
+            maximum_distance: 7000.0,
+            ..default()
+        }
+        .build(),
+        Transform::from_xyz(-1.0, 0.9, 0.55).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     commands.insert_resource(GlobalAmbientLight {
-        color: Color::WHITE,
-        brightness: 250.0,
+        color: Color::srgb(0.75, 0.82, 1.0),
+        brightness: 260.0,
         ..default()
     });
-    commands.insert_resource(ClearColor(Color::srgb(0.62, 0.72, 0.82)));
+    commands.insert_resource(ClearColor(SKY));
+}
+
+const SKY: Color = Color::srgb(0.64, 0.76, 0.88);
+
+fn hash01(k: u64, salt: u64) -> f32 {
+    (sim_core::rng::mix(k ^ salt.wrapping_mul(0x9E37_79B9)) >> 40) as f32 / (1u64 << 24) as f32
+}
+
+fn tint(mut m: Mesh, rgb: [f32; 3]) -> Mesh {
+    let n = m.count_vertices();
+    m.insert_attribute(Mesh::ATTRIBUTE_COLOR, vec![[rgb[0], rgb[1], rgb[2], 1.0]; n]);
+    m
+}
+
+fn merged(parts: Vec<Mesh>) -> Mesh {
+    let mut it = parts.into_iter();
+    let mut m = it.next().unwrap();
+    for p in it {
+        let _ = m.merge(&p);
+    }
+    m
+}
+
+/// Conifer: trunk and two stacked cones; ~12 m tall at scale 1.
+fn conifer_mesh() -> Mesh {
+    merged(vec![
+        tint(
+            Mesh::from(Cylinder::new(0.45, 3.0)).transformed_by(Transform::from_xyz(0.0, 1.5, 0.0)),
+            [0.36, 0.25, 0.16],
+        ),
+        tint(
+            Mesh::from(Cone { radius: 3.0, height: 6.5 }).transformed_by(Transform::from_xyz(0.0, 5.2, 0.0)),
+            [0.16, 0.34, 0.20],
+        ),
+        tint(
+            Mesh::from(Cone { radius: 2.1, height: 5.0 }).transformed_by(Transform::from_xyz(0.0, 8.4, 0.0)),
+            [0.18, 0.38, 0.22],
+        ),
+    ])
+}
+
+/// Broadleaf: trunk and a rounded, slightly squashed canopy.
+fn broadleaf_mesh() -> Mesh {
+    merged(vec![
+        tint(
+            Mesh::from(Cylinder::new(0.5, 4.0)).transformed_by(Transform::from_xyz(0.0, 2.0, 0.0)),
+            [0.38, 0.27, 0.17],
+        ),
+        tint(
+            Sphere::new(3.2)
+                .mesh()
+                .ico(2)
+                .unwrap()
+                .transformed_by(Transform::from_xyz(0.0, 6.2, 0.0).with_scale(Vec3::new(1.0, 0.8, 1.0))),
+            [0.30, 0.46, 0.20],
+        ),
+        tint(
+            Sphere::new(2.0)
+                .mesh()
+                .ico(1)
+                .unwrap()
+                .transformed_by(Transform::from_xyz(1.6, 5.4, 0.8)),
+            [0.26, 0.42, 0.18],
+        ),
+    ])
+}
+
+/// A small grazing quadruped facing +x.
+fn animal_mesh() -> Mesh {
+    let leg = |x: f32, z: f32| {
+        tint(
+            Mesh::from(Cylinder::new(0.32, 2.0)).transformed_by(Transform::from_xyz(x, -1.3, z)),
+            [0.25, 0.22, 0.2],
+        )
+    };
+    merged(vec![
+        tint(
+            Mesh::from(Capsule3d::new(1.35, 2.6))
+                .transformed_by(Transform::from_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2))),
+            [1.0, 1.0, 1.0],
+        ),
+        tint(
+            Sphere::new(1.05)
+                .mesh()
+                .ico(1)
+                .unwrap()
+                .transformed_by(Transform::from_xyz(2.7, 0.9, 0.0)),
+            [0.9, 0.9, 0.9],
+        ),
+        leg(1.2, 0.7),
+        leg(1.2, -0.7),
+        leg(-1.2, 0.7),
+        leg(-1.2, -0.7),
+    ])
+}
+
+fn smooth(e0: f32, e1: f32, x: f32) -> f32 {
+    let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn height_at(s: &Snapshot, vs: f32, x: f32, z: f32) -> f32 {
@@ -301,17 +402,31 @@ fn cell_color(s: &Snapshot, view: &ViewState, c: usize, cache: &OverlayCache) ->
     let rgb = match view.overlay {
         Overlay::Natural | Overlay::Flow => {
             let moisture = if get(cache.cap) > 0.0 {
-                get(cache.soil) / get(cache.cap)
+                (get(cache.soil) / get(cache.cap)).clamp(0.0, 1.0)
             } else {
                 0.0
             };
-            let base = lerp3([0.78, 0.70, 0.50], [0.38, 0.30, 0.20], moisture.clamp(0.0, 1.0));
             let veg = get(cache.veg);
-            let cover = veg / (veg + 400.0);
+            let cover = veg / (veg + 500.0);
             let e = (s.elevation[c] - cache.emin) / (cache.emax - cache.emin).max(1e-6);
-            let rock = lerp3(base, [0.55, 0.53, 0.50], (e - 0.8).max(0.0) * 3.0);
-            let green = lerp3([0.40, 0.55, 0.22], [0.12, 0.38, 0.14], cover);
-            let mut rgb = lerp3(rock, green, (cover * 1.1).min(0.95));
+            // Grass from dry straw to lush green; darker forest floor under dense cover.
+            let grass = lerp3([0.52, 0.52, 0.26], [0.20, 0.42, 0.12], smooth(0.08, 0.5, moisture));
+            let mut rgb = lerp3(grass, [0.12, 0.24, 0.09], cover * 0.8);
+            // Bare, dry ground where vegetation is sparse.
+            rgb = lerp3(
+                lerp3([0.60, 0.53, 0.38], [0.38, 0.31, 0.22], moisture),
+                rgb,
+                smooth(0.02, 0.2, cover),
+            );
+            // Rock on steep slopes and high ground.
+            let slope = cache.slope.get(c).copied().unwrap_or(0.0);
+            rgb = lerp3(rgb, [0.52, 0.50, 0.47], smooth(0.18, 0.45, slope).max(smooth(0.85, 1.0, e) * 0.5));
+            // Wet mud along water.
+            let depth = get(cache.sw) / (1000.0 * (s.cell_size * s.cell_size) as f32);
+            rgb = lerp3(rgb, [0.33, 0.30, 0.22], smooth(0.0005, 0.004, depth) * 0.8);
+            // Per-cell variation so fields do not look flat.
+            let n = 0.92 + 0.16 * hash01(c as u64, 7);
+            rgb = [rgb[0] * n, rgb[1] * n, rgb[2] * n];
             if view.overlay == Overlay::Flow {
                 rgb = lerp3(rgb, [0.5, 0.5, 0.5], 0.5);
                 if let Some(f) = &cache.flow_mag {
@@ -357,6 +472,7 @@ struct OverlayCache<'a> {
     nut: Option<&'a [f32]>,
     region: Option<&'a [f32]>,
     flow_mag: Option<Vec<f32>>,
+    slope: &'a [f32],
     emin: f32,
     emax: f32,
 }
@@ -428,19 +544,26 @@ pub fn update_scene(
                 unlit: true,
                 ..default()
             }));
-            scene.plant_mesh = Some(meshes.add(Cone { radius: 5.0, height: 12.0 }));
-            scene.plant_mat = Some(materials.add(StandardMaterial {
-                base_color: Color::srgb(0.16, 0.42, 0.16),
-                perceptual_roughness: 0.9,
-                ..default()
-            }));
-            scene.organism_mesh = Some(meshes.add(Capsule3d::new(3.0, 5.0)));
+            scene.plant_meshes = vec![meshes.add(conifer_mesh()), meshes.add(broadleaf_mesh())];
+            // Slight tint variations; vertex colors carry trunk vs. canopy.
+            scene.plant_mats = [[1.0, 1.0, 1.0], [0.85, 0.95, 0.85], [1.12, 1.05, 0.85]]
+                .iter()
+                .map(|t| {
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgb(t[0], t[1], t[2]),
+                        perceptual_roughness: 0.92,
+                        ..default()
+                    })
+                })
+                .collect();
+            scene.organism_mesh = Some(meshes.add(animal_mesh()));
+            // Muted, earthy lineage colors that stay readable against grass.
             scene.organism_mats = (0..10)
                 .map(|k| {
-                    let hue = k as f32 * 36.0;
+                    let hue = [20.0, 35.0, 0.0, 200.0, 280.0, 45.0, 330.0, 180.0, 15.0, 240.0][k];
                     materials.add(StandardMaterial {
-                        base_color: Color::hsl(hue, 0.75, 0.55),
-                        emissive: LinearRgba::from(Color::hsl(hue, 0.8, 0.25)),
+                        base_color: Color::hsl(hue, 0.45, 0.62),
+                        perceptual_roughness: 0.8,
                         ..default()
                     })
                 })
@@ -448,8 +571,8 @@ pub fn update_scene(
             let water_mat = materials.add(StandardMaterial {
                 base_color: Color::srgba(1.0, 1.0, 1.0, 1.0),
                 alpha_mode: AlphaMode::Blend,
-                perceptual_roughness: 0.15,
-                reflectance: 0.6,
+                perceptual_roughness: 0.06,
+                reflectance: 0.55,
                 ..default()
             });
             commands.spawn((TerrainMesh, Mesh3d(terrain.clone()), MeshMaterial3d(scene.lit.clone().unwrap())));
@@ -468,7 +591,7 @@ pub fn update_scene(
         }
         // Vegetation instance pool on a coarse lattice (presentation only).
         if scene.plants_stride == 0 {
-            let stride = (w / 80).max(1);
+            let stride = (w / 110).max(1);
             scene.plants_stride = stride;
             let mut z = stride / 2;
             while z < h {
@@ -483,11 +606,18 @@ pub fn update_scene(
                         (z as f32 + jz).clamp(0.0, h as f32 - 1.0),
                     );
                     let c = pz as usize * w + px as usize;
+                    let emin = s.elevation.iter().cloned().fold(f32::INFINITY, f32::min);
+                    let emax = s.elevation.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                    let en = (s.elevation[c] - emin) / (emax - emin).max(1e-6);
+                    // Conifers favor higher ground, broadleaf trees the lowlands.
+                    let variant = usize::from(hash01(hsh, 3) > 0.25 + 0.6 * en);
+                    let mat = (hash01(hsh, 5) * 3.0) as usize % 3;
+                    let yaw = hash01(hsh, 9) * std::f32::consts::TAU;
                     commands.spawn((
                         Plant(c),
-                        Mesh3d(scene.plant_mesh.clone().unwrap()),
-                        MeshMaterial3d(scene.plant_mat.clone().unwrap()),
-                        Transform::from_xyz((px + 0.5) * cs, 0.0, (pz + 0.5) * cs),
+                        Mesh3d(scene.plant_meshes[variant].clone()),
+                        MeshMaterial3d(scene.plant_mats[mat].clone()),
+                        Transform::from_xyz((px + 0.5) * cs, 0.0, (pz + 0.5) * cs).with_rotation(Quat::from_rotation_y(yaw)),
                         Visibility::Hidden,
                     ));
                     x += stride;
@@ -495,6 +625,14 @@ pub fn update_scene(
                 z += stride;
             }
         }
+        scene.slope = (0..w * h)
+            .map(|c| {
+                let (x, z) = (c % w, c / w);
+                let ex = s.elevation[z * w + (x + 1).min(w - 1)] - s.elevation[z * w + x.saturating_sub(1)];
+                let ez = s.elevation[(z + 1).min(h - 1) * w + x] - s.elevation[z.saturating_sub(1) * w + x];
+                (ex * ex + ez * ez).sqrt() / (2.0 * cs)
+            })
+            .collect();
         scene.built = Some((w, h, vs));
         scene.elevation = Some(s.elevation.clone());
         scene.colored_for = None;
@@ -503,7 +641,8 @@ pub fn update_scene(
             view.orbit_target = Vec3::new(ex / 2.0, 0.0, ez / 2.0);
             view.top_center = Vec2::new(ex / 2.0, ez / 2.0);
             view.top_height = ez * 1.05;
-            view.orbit_distance = ex.max(ez) * 1.2;
+            view.orbit_distance = ex.max(ez) * 0.45;
+            view.orbit_pitch = 0.55;
         }
     }
 
@@ -540,6 +679,7 @@ pub fn update_scene(
             nut: field(&s, "soil_nutrients"),
             region,
             flow_mag,
+            slope: &scene.slope,
             emin,
             emax,
         };
@@ -573,7 +713,7 @@ pub fn update_scene(
         }
         let natural = matches!(view.overlay, Overlay::Natural | Overlay::Flow);
         for (mut mat, _) in &mut terrain_q {
-            let want = if natural && view.mode == ViewMode::Orbit {
+            let want = if natural {
                 scene.lit.clone().unwrap()
             } else {
                 scene.unlit.clone().unwrap()
@@ -594,14 +734,16 @@ pub fn update_scene(
         let show_plants = view.show_vegetation && natural;
         for (p, mut t, mut vis) in &mut plants {
             let b = veg.map(|v| v[p.0]).unwrap_or(0.0);
-            if !show_plants || b < 250.0 {
+            let depth = cache.sw.map(|v| v[p.0]).unwrap_or(0.0) / (1000.0 * cs * cs);
+            if !show_plants || b < 250.0 || depth > 0.02 {
                 *vis = Visibility::Hidden;
                 continue;
             }
             *vis = Visibility::Visible;
-            let k = (b / 2000.0).clamp(0.25, 1.6) * scene.plants_stride as f32 * 0.9;
-            t.scale = Vec3::new(k, k * 1.3, k);
-            t.translation.y = s.elevation[p.0] * vs + 6.0 * k * 1.3 * 0.5;
+            let jitter = 0.75 + 0.5 * hash01(p.0 as u64, 11);
+            let k = (b / 1800.0).clamp(0.35, 1.5) * scene.plants_stride as f32 * 1.25 * jitter;
+            t.scale = Vec3::new(k, k * (0.9 + 0.3 * hash01(p.0 as u64, 13)), k);
+            t.translation.y = s.elevation[p.0] * vs - 0.3;
         }
     }
 
@@ -610,10 +752,11 @@ pub fn update_scene(
     for ents in &s.entities {
         for e in ents {
             alive.insert(e.id, ());
-            let y = height_at(&s, vs, e.x, e.z) + 5.0;
+            let k = 0.9 + e.size * 0.5;
+            let y = height_at(&s, vs, e.x, e.z) + 2.3 * k;
             let tr = Transform::from_xyz(e.x, y, e.z)
-                .with_rotation(Quat::from_rotation_y(-e.heading) * Quat::from_rotation_z(std::f32::consts::FRAC_PI_2))
-                .with_scale(Vec3::splat(0.8 + e.size * 0.6));
+                .with_rotation(Quat::from_rotation_y(-e.heading))
+                .with_scale(Vec3::splat(k));
             match scene.organisms.get(&e.id) {
                 Some(&ent) => {
                     if let Ok((mut t, mut v)) = organisms.get_mut(ent) {
@@ -650,13 +793,23 @@ pub fn camera_control(
     keys: Res<ButtonInput<KeyCode>>,
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
-    mut cam: Single<(&mut Transform, &mut Projection, &mut Camera), With<MainCamera>>,
+    mut cam: Single<(&mut Transform, &mut Projection, &mut Camera, &mut bevy::pbr::DistanceFog), With<MainCamera>>,
     window: Single<&Window, With<PrimaryWindow>>,
     offscreen: Option<Res<Offscreen>>,
 ) {
     let offscreen = offscreen.is_some();
     let over_ui = state.pointer_over_ui;
-    let (ref mut t, ref mut proj, ref mut camera) = *cam;
+    let (ref mut t, ref mut proj, ref mut camera, ref mut fog) = *cam;
+    // Atmospheric haze scales with viewing distance so the focus area stays crisp.
+    let d = if view.mode == ViewMode::Orbit {
+        view.orbit_distance
+    } else {
+        view.top_height
+    };
+    fog.falloff = bevy::pbr::FogFalloff::Linear {
+        start: d * 1.1,
+        end: d * 4.5,
+    };
     if let Some((x, y, w, h)) = view.viewport.filter(|_| !offscreen) {
         let size = UVec2::new(w.max(1), h.max(1));
         let pos = UVec2::new(x, y);
