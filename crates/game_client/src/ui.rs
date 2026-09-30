@@ -118,7 +118,7 @@ pub fn ui_system(
         ui.horizontal_wrapped(|ui| {
             ui.heading("Evolving Worlds");
             ui.separator();
-            ui.monospace(format!("{}", fmt_time(s.time)));
+            ui.monospace(fmt_time(s.time));
             ui.separator();
             for (sp, label, tip) in [
                 (Speed::Paused, "⏸", "Pause"),
