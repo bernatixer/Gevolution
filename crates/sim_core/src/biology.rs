@@ -61,13 +61,7 @@ pub fn mlp_of(a: &ArchInfo) -> Mlp {
 }
 
 /// Batched brain evaluation for every entity of an archetype.
-pub fn eval_brain(
-    inp: &EvalInputs,
-    bufs: &[Vec<f64>],
-    arch: u16,
-    inputs: &[Slot],
-    outs: &mut [Vec<f64>],
-) {
+pub fn eval_brain(inp: &EvalInputs, bufs: &[Vec<f64>], arch: u16, inputs: &[Slot], outs: &mut [Vec<f64>]) {
     let ai = &inp.plan.schema.archetypes[arch as usize];
     let e = &inp.state.entities[arch as usize];
     let net = mlp_of(ai);
@@ -86,13 +80,9 @@ pub fn eval_brain(
         net.eval(&g[nt..], &x[..net.inputs], &mut h[..net.hidden], y);
     };
     if m > 256 {
-        flat.par_chunks_mut(no)
-            .enumerate()
-            .for_each(|(i, y)| body(i, y));
+        flat.par_chunks_mut(no).enumerate().for_each(|(i, y)| body(i, y));
     } else {
-        flat.chunks_mut(no)
-            .enumerate()
-            .for_each(|(i, y)| body(i, y));
+        flat.chunks_mut(no).enumerate().for_each(|(i, y)| body(i, y));
     }
     for (k, o) in outs.iter_mut().enumerate() {
         for i in 0..m {
@@ -137,9 +127,7 @@ pub fn mutate(a: &ArchInfo, parent: &[f64], seed: u64, tick: u64, child_id: u64)
     for (k, v) in g.iter_mut().enumerate() {
         if rng::draw(seed, tick, STREAM_MUTATION, child_id, k as u64) < p {
             let (lo, hi) = bounds(a, k);
-            let d = rng::normalish(seed, tick, STREAM_MUTATION_SIZE, child_id, k as u64)
-                * a.mutation.scale
-                * (hi - lo);
+            let d = rng::normalish(seed, tick, STREAM_MUTATION_SIZE, child_id, k as u64) * a.mutation.scale * (hi - lo);
             *v = (*v + d).clamp(lo, hi);
         }
     }

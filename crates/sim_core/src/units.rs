@@ -48,32 +48,19 @@ impl Unit {
     }
     /// The interval unit corresponding to this unit (drops the absolute flag).
     pub fn interval(&self) -> Unit {
-        Unit {
-            absolute: false,
-            ..*self
-        }
+        Unit { absolute: false, ..*self }
     }
     pub fn mul(&self, o: &Unit) -> Result<Unit, String> {
         if self.absolute || o.absolute {
             return Err("absolute temperature cannot be multiplied or divided; subtract a reference temperature first".into());
         }
-        Ok(Unit::new(
-            self.kg + o.kg,
-            self.m + o.m,
-            self.s + o.s,
-            self.k + o.k,
-        ))
+        Ok(Unit::new(self.kg + o.kg, self.m + o.m, self.s + o.s, self.k + o.k))
     }
     pub fn div(&self, o: &Unit) -> Result<Unit, String> {
         if self.absolute || o.absolute {
             return Err("absolute temperature cannot be multiplied or divided; subtract a reference temperature first".into());
         }
-        Ok(Unit::new(
-            self.kg - o.kg,
-            self.m - o.m,
-            self.s - o.s,
-            self.k - o.k,
-        ))
+        Ok(Unit::new(self.kg - o.kg, self.m - o.m, self.s - o.s, self.k - o.k))
     }
     pub fn powi(&self, n: i8) -> Result<Unit, String> {
         if self.absolute {
@@ -85,9 +72,7 @@ impl Unit {
     pub fn add(&self, o: &Unit) -> Result<Unit, String> {
         match (self.absolute, o.absolute) {
             (false, false) if self == o => Ok(*self),
-            (true, false) | (false, true) if self.interval() == o.interval() => {
-                Ok(Unit::absolute_temperature())
-            }
+            (true, false) | (false, true) if self.interval() == o.interval() => Ok(Unit::absolute_temperature()),
             (true, true) => Err("cannot add two absolute temperatures".into()),
             _ => Err(format!("cannot add {} and {}", self, o)),
         }
@@ -123,39 +108,18 @@ impl fmt::Display for Unit {
         if self.absolute {
             return write!(f, "K");
         }
-        let parts = [
-            ("kg", self.kg),
-            ("m", self.m),
-            ("s", self.s),
-            ("dK", self.k),
-        ];
+        let parts = [("kg", self.kg), ("m", self.m), ("s", self.s), ("dK", self.k)];
         let num: Vec<String> = parts
             .iter()
             .filter(|(_, e)| *e > 0)
-            .map(|(n, e)| {
-                if *e == 1 {
-                    n.to_string()
-                } else {
-                    format!("{n}^{e}")
-                }
-            })
+            .map(|(n, e)| if *e == 1 { n.to_string() } else { format!("{n}^{e}") })
             .collect();
         let den: Vec<String> = parts
             .iter()
             .filter(|(_, e)| *e < 0)
-            .map(|(n, e)| {
-                if *e == -1 {
-                    n.to_string()
-                } else {
-                    format!("{n}^{}", -e)
-                }
-            })
+            .map(|(n, e)| if *e == -1 { n.to_string() } else { format!("{n}^{}", -e) })
             .collect();
-        let n = if num.is_empty() {
-            "1".to_string()
-        } else {
-            num.join("*")
-        };
+        let n = if num.is_empty() { "1".to_string() } else { num.join("*") };
         match den.len() {
             0 => write!(f, "{n}"),
             1 => write!(f, "{n}/{}", den[0]),
@@ -210,9 +174,7 @@ fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                     i += 1;
                 }
                 let t: String = cs[st..i].iter().collect();
-                out.push(Tok::Int(
-                    t.parse().map_err(|_| format!("bad exponent '{t}'"))?,
-                ));
+                out.push(Tok::Int(t.parse().map_err(|_| format!("bad exponent '{t}'"))?));
             }
             c if c.is_ascii_alphabetic() => {
                 let st = i;
@@ -299,9 +261,7 @@ fn symbol(s: &str) -> Result<Unit, String> {
         "W" => Unit::new(1, 2, -3, 0),
         "rad" => DIMENSIONLESS,
         _ => {
-            return Err(format!(
-                "unknown unit symbol '{s}' (supported: kg, m, s, K, dK, J, W, rad, 1)"
-            ));
+            return Err(format!("unknown unit symbol '{s}' (supported: kg, m, s, K, dK, J, W, rad, 1)"));
         }
     })
 }
@@ -322,16 +282,8 @@ mod tests {
         let flux = Unit::parse("kg/(m^2*s)").unwrap();
         let area = Unit::parse("m^2").unwrap();
         assert_eq!(flux.mul(&area).unwrap(), rate);
-        assert_eq!(
-            rate.mul(&Unit::parse("s").unwrap()).unwrap(),
-            Unit::parse("kg").unwrap()
-        );
-        assert!(
-            Unit::parse("kg")
-                .unwrap()
-                .add(&Unit::parse("K").unwrap())
-                .is_err()
-        );
+        assert_eq!(rate.mul(&Unit::parse("s").unwrap()).unwrap(), Unit::parse("kg").unwrap());
+        assert!(Unit::parse("kg").unwrap().add(&Unit::parse("K").unwrap()).is_err());
         let t = Unit::parse("K").unwrap();
         assert_eq!(t.sub(&t).unwrap(), Unit::parse("dK").unwrap());
         assert_eq!(t.add(&Unit::parse("dK").unwrap()).unwrap(), t);

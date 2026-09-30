@@ -99,13 +99,7 @@ pub fn save(w: &World) -> Vec<u8> {
         next_seq: w.next_seq,
         regions: s.regions.clone(),
         cell_fields: s.cell_fields.iter().map(|f| f.id.clone()).collect(),
-        params: w
-            .plan()
-            .params
-            .iter()
-            .zip(&st.params)
-            .map(|(p, v)| (p.name.clone(), *v))
-            .collect(),
+        params: w.plan().params.iter().zip(&st.params).map(|(p, v)| (p.name.clone(), *v)).collect(),
         accounts: s
             .accounts
             .iter()
@@ -116,14 +110,7 @@ pub fn save(w: &World) -> Vec<u8> {
             .resources
             .iter()
             .enumerate()
-            .map(|(i, r)| {
-                (
-                    r.id.clone(),
-                    st.intervention_in[i],
-                    st.intervention_out[i],
-                    st.roundoff[i],
-                )
-            })
+            .map(|(i, r)| (r.id.clone(), st.intervention_in[i], st.intervention_out[i], st.roundoff[i]))
             .collect(),
         ledger: w.ledger.clone(),
         archetypes,
@@ -172,13 +159,9 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
     if hlen > MAX_HEADER_BYTES || hlen > (bytes.len() - 16) as u64 {
         return Err("save header length is invalid".into());
     }
-    let header: Header = serde_json::from_slice(&bytes[16..16 + hlen as usize])
-        .map_err(|e| format!("invalid save header: {e}"))?;
+    let header: Header = serde_json::from_slice(&bytes[16..16 + hlen as usize]).map_err(|e| format!("invalid save header: {e}"))?;
     if header.format != "evolving-worlds-save" || header.format_version != FORMAT_VERSION {
-        return Err(format!(
-            "unsupported save format {} v{}",
-            header.format, header.format_version
-        ));
+        return Err(format!("unsupported save format {} v{}", header.format, header.format_version));
     }
     let build = world::build_fingerprint();
     if header.build != build {
@@ -219,15 +202,8 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
     let mut entities = vec![];
     for (a, sv) in schema.archetypes.iter().zip(header.archetypes) {
         let fields: Vec<String> = a.fields.iter().map(|f| f.id.clone()).collect();
-        if sv.id != a.id
-            || sv.fields != fields
-            || sv.genome_len != a.genome_len()
-            || sv.lineage.len() != sv.ids.len()
-        {
-            return Err(format!(
-                "saved archetype {} does not match the compiled schema",
-                sv.id
-            ));
+        if sv.id != a.id || sv.fields != fields || sv.genome_len != a.genome_len() || sv.lineage.len() != sv.ids.len() {
+            return Err(format!("saved archetype {} does not match the compiled schema", sv.id));
         }
         if sv.ids.windows(2).any(|w| w[0] >= w[1]) {
             return Err("saved entity ids are not strictly increasing".into());
@@ -253,24 +229,12 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
     if r.pos != blob.len() {
         return Err("save data has trailing values".into());
     }
-    let find = |v: &[(String, f64, f64)], id: &str| {
-        v.iter()
-            .find(|x| x.0 == id)
-            .map(|x| (x.1, x.2))
-            .unwrap_or((0.0, 0.0))
-    };
+    let find = |v: &[(String, f64, f64)], id: &str| v.iter().find(|x| x.0 == id).map(|x| (x.1, x.2)).unwrap_or((0.0, 0.0));
     let params: Vec<f64> = active
         .plan
         .params
         .iter()
-        .map(|p| {
-            header
-                .params
-                .iter()
-                .find(|x| x.0 == p.name)
-                .map(|x| x.1)
-                .unwrap_or(p.value)
-        })
+        .map(|p| header.params.iter().find(|x| x.0 == p.name).map(|x| x.1).unwrap_or(p.value))
         .collect();
     let res = |id: &str| {
         header
@@ -286,27 +250,14 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
         regions,
         entities,
         params,
-        account_in: schema
-            .accounts
-            .iter()
-            .map(|a| find(&header.accounts, &a.id).0)
-            .collect(),
-        account_out: schema
-            .accounts
-            .iter()
-            .map(|a| find(&header.accounts, &a.id).1)
-            .collect(),
+        account_in: schema.accounts.iter().map(|a| find(&header.accounts, &a.id).0).collect(),
+        account_out: schema.accounts.iter().map(|a| find(&header.accounts, &a.id).1).collect(),
         intervention_in: schema.resources.iter().map(|x| res(&x.id).0).collect(),
         intervention_out: schema.resources.iter().map(|x| res(&x.id).1).collect(),
         roundoff: schema.resources.iter().map(|x| res(&x.id).2).collect(),
         next_entity_id: header.next_entity_id,
     };
-    let all_finite = state
-        .cells
-        .iter()
-        .chain(&state.regions)
-        .flatten()
-        .all(|v| v.is_finite())
+    let all_finite = state.cells.iter().chain(&state.regions).flatten().all(|v| v.is_finite())
         && state.entities.iter().all(|e| {
             e.fields
                 .iter()
@@ -319,9 +270,7 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
     if !all_finite {
         return Err("save contains non-finite values".into());
     }
-    let elevation = schema
-        .cell_field(worldgen::ELEVATION_FIELD)
-        .ok_or("missing elevation field")?;
+    let elevation = schema.cell_field(worldgen::ELEVATION_FIELD).ok_or("missing elevation field")?;
     let elevation_norm = worldgen::normalized(&state.cells[elevation]);
     let grid = crate::grid::Grid {
         id: sc.grid.id.clone(),
@@ -330,14 +279,9 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
         cell_size: sc.grid.cell_size,
         chunk_size: sc.grid.chunk_size,
     };
-    let pool = config.threads.map(|n| {
-        Arc::new(
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(n)
-                .build()
-                .expect("thread pool"),
-        )
-    });
+    let pool = config
+        .threads
+        .map(|n| Arc::new(rayon::ThreadPoolBuilder::new().num_threads(n).build().expect("thread pool")));
     let mut w = World {
         scenario: sc,
         active,
@@ -359,6 +303,7 @@ pub fn load(bytes: &[u8], config: RunConfig) -> Result<World, String> {
         events: VecDeque::new(),
         history: VecDeque::new(),
         stats: header.stats,
+        timings: Default::default(),
     };
     w.sample();
     Ok(w)
@@ -373,8 +318,5 @@ pub fn load_from(path: &std::path::Path, config: RunConfig) -> Result<World, Str
     if meta.len() > MAX_SAVE_BYTES {
         return Err("save file too large".into());
     }
-    load(
-        &std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?,
-        config,
-    )
+    load(&std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?, config)
 }

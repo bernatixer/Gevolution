@@ -110,8 +110,7 @@ pub fn scenario(w: usize, h: usize, initial: Value, regions: Value, rain: f64) -
 }
 
 pub fn world(sc: Scenario, pkgs: Vec<Value>, config: RunConfig) -> World {
-    World::new(sc, pkgs.into_iter().map(pkg).collect(), config)
-        .unwrap_or_else(|e| panic!("world: {e}"))
+    World::new(sc, pkgs.into_iter().map(pkg).collect(), config).unwrap_or_else(|e| panic!("world: {e}"))
 }
 
 pub fn field<'a>(w: &'a World, name: &str) -> &'a [f64] {

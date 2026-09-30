@@ -16,19 +16,13 @@ impl Weather {
     pub fn new(decl: &WeatherDecl, schema: &Schema) -> Result<Weather, String> {
         for k in decl.signals.keys() {
             if schema.forcing(k).is_none() {
-                return Err(format!(
-                    "weather signal {k} does not match a declared forcing"
-                ));
+                return Err(format!("weather signal {k} does not match a declared forcing"));
             }
         }
         let signals = schema
             .forcings
             .iter()
-            .map(|f| {
-                decl.signals
-                    .get(&f.id)
-                    .map(|s| (s.clone(), f.cells, rng::hash_str(&f.id)))
-            })
+            .map(|f| decl.signals.get(&f.id).map(|s| (s.clone(), f.cells, rng::hash_str(&f.id))))
             .collect();
         Ok(Weather { signals })
     }

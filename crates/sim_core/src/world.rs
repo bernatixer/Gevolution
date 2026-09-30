@@ -87,11 +87,7 @@ pub struct TickFailure {
 
 impl std::fmt::Display for TickFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "tick {} failed in {}: {}",
-            self.tick, self.phase, self.message
-        )?;
+        write!(f, "tick {} failed in {}: {}", self.tick, self.phase, self.message)?;
         if let Some(e) = &self.effect {
             write!(f, " (effect {e})")?;
         }
@@ -107,31 +103,12 @@ impl std::fmt::Display for TickFailure {
 
 #[derive(Clone, Debug, Serialize)]
 pub enum EventKind {
-    Birth {
-        arch: String,
-        id: u64,
-        parent: u64,
-    },
-    Death {
-        arch: String,
-        id: u64,
-        reason: String,
-    },
-    CommandApplied {
-        seq: u64,
-        summary: String,
-    },
-    CommandRejected {
-        seq: u64,
-        reason: String,
-    },
-    PopulationCap {
-        rejected: usize,
-    },
-    RangeWarning {
-        field: String,
-        count: usize,
-    },
+    Birth { arch: String, id: u64, parent: u64 },
+    Death { arch: String, id: u64, reason: String },
+    CommandApplied { seq: u64, summary: String },
+    CommandRejected { seq: u64, reason: String },
+    PopulationCap { rejected: usize },
+    RangeWarning { field: String, count: usize },
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -180,6 +157,21 @@ pub struct Stats {
     pub range_violations: BTreeMap<String, usize>,
 }
 
+/// Wall-clock milliseconds per phase of the last committed tick (diagnostic only).
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct PhaseTimings {
+    pub commands: f64,
+    pub snapshot: f64,
+    pub evaluation: f64,
+    pub resolution: f64,
+    pub receipts: f64,
+    pub integration: f64,
+    pub lifecycle: f64,
+    pub validation: f64,
+    pub commit: f64,
+    pub total: f64,
+}
+
 /// Wiring of non-resource effects to state fields, in canonical order.
 #[derive(Clone, Debug, Default)]
 pub struct Wiring {
@@ -199,45 +191,21 @@ impl Wiring {
         let mut w = Wiring {
             rate_cell: vec![vec![]; s.cell_fields.len()],
             next_cell: vec![None; s.cell_fields.len()],
-            rate_ent: s
-                .archetypes
-                .iter()
-                .map(|a| vec![vec![]; a.fields.len()])
-                .collect(),
-            next_ent: s
-                .archetypes
-                .iter()
-                .map(|a| vec![None; a.fields.len()])
-                .collect(),
+            rate_ent: s.archetypes.iter().map(|a| vec![vec![]; a.fields.len()]).collect(),
+            next_ent: s.archetypes.iter().map(|a| vec![None; a.fields.len()]).collect(),
             moves: vec![None; na],
             deaths: vec![vec![]; na],
             births: vec![None; na],
         };
         for e in &plan.effects {
             match &e.kind {
-                EffectKind::RateCell { field, rate } => {
-                    w.rate_cell[*field].push((*rate, e.coverage))
-                }
+                EffectKind::RateCell { field, rate } => w.rate_cell[*field].push((*rate, e.coverage)),
                 EffectKind::NextCell { field, value } => w.next_cell[*field] = Some(*value),
-                EffectKind::RateEntity { arch, field, rate } => {
-                    w.rate_ent[*arch as usize][*field].push((*rate, e.coverage))
-                }
-                EffectKind::NextEntity { arch, field, value } => {
-                    w.next_ent[*arch as usize][*field] = Some(*value)
-                }
-                EffectKind::Move { arch, turn, speed } => {
-                    w.moves[*arch as usize] = Some((*turn, *speed))
-                }
-                EffectKind::Death {
-                    arch,
-                    condition,
-                    reason,
-                } => w.deaths[*arch as usize].push((*condition, reason.clone())),
-                EffectKind::Birth {
-                    arch,
-                    condition,
-                    legs,
-                } => w.births[*arch as usize] = Some((*condition, legs.clone())),
+                EffectKind::RateEntity { arch, field, rate } => w.rate_ent[*arch as usize][*field].push((*rate, e.coverage)),
+                EffectKind::NextEntity { arch, field, value } => w.next_ent[*arch as usize][*field] = Some(*value),
+                EffectKind::Move { arch, turn, speed } => w.moves[*arch as usize] = Some((*turn, *speed)),
+                EffectKind::Death { arch, condition, reason } => w.deaths[*arch as usize].push((*condition, reason.clone())),
+                EffectKind::Birth { arch, condition, legs } => w.births[*arch as usize] = Some((*condition, legs.clone())),
                 _ => {}
             }
         }
@@ -286,6 +254,7 @@ pub struct World {
     pub events: VecDeque<Event>,
     pub history: VecDeque<Sample>,
     pub stats: Stats,
+    pub timings: PhaseTimings,
 }
 
 pub fn compile_env(sc: &Scenario, regions: Vec<String>) -> CompileEnv {
@@ -302,10 +271,7 @@ pub fn compile_env(sc: &Scenario, regions: Vec<String>) -> CompileEnv {
 }
 
 pub fn format_diagnostics(d: &[Diagnostic]) -> String {
-    d.iter()
-        .map(|x| x.to_string())
-        .collect::<Vec<_>>()
-        .join("\n")
+    d.iter().map(|x| x.to_string()).collect::<Vec<_>>().join("\n")
 }
 
 pub fn validate_scenario(sc: &Scenario) -> Result<(), String> {
@@ -335,12 +301,7 @@ pub fn validate_scenario(sc: &Scenario) -> Result<(), String> {
 }
 
 impl Active {
-    pub fn build(
-        packages: Vec<Package>,
-        env: &CompileEnv,
-        sc: &Scenario,
-        config: &RunConfig,
-    ) -> Result<Active, String> {
+    pub fn build(packages: Vec<Package>, env: &CompileEnv, sc: &Scenario, config: &RunConfig) -> Result<Active, String> {
         let mut plan = compiler::compile(&packages, env).map_err(|d| format_diagnostics(&d))?;
         if plan.schema.grids.len() != 1 {
             return Err("only one simulated grid is supported".into());
@@ -351,10 +312,7 @@ impl Active {
         let weather = Weather::new(&sc.weather, &plan.schema)?;
         let missing = weather.missing(&plan.schema);
         if !missing.is_empty() {
-            return Err(format!(
-                "scenario weather does not supply forcings: {}",
-                missing.join(", ")
-            ));
+            return Err(format!("scenario weather does not supply forcings: {}", missing.join(", ")));
         }
         let groups = eval::fuse_groups(&plan);
         Ok(Active {
@@ -390,11 +348,7 @@ fn resource_totals(schema: &Schema, s: &State) -> Vec<f64> {
 }
 
 impl World {
-    pub fn new(
-        scenario: Scenario,
-        packages: Vec<Package>,
-        config: RunConfig,
-    ) -> Result<World, String> {
+    pub fn new(scenario: Scenario, packages: Vec<Package>, config: RunConfig) -> Result<World, String> {
         validate_scenario(&scenario)?;
         let grid = Grid {
             id: scenario.grid.id.clone(),
@@ -405,9 +359,7 @@ impl World {
         };
         let mut regions = vec![];
         for r in &scenario.regions {
-            if !compiler::valid_id(&r.id)
-                || regions.iter().any(|(x, _): &(String, Vec<f64>)| *x == r.id)
-            {
+            if !compiler::valid_id(&r.id) || regions.iter().any(|(x, _): &(String, Vec<f64>)| *x == r.id) {
                 return Err(format!("invalid or duplicate region id {}", r.id));
             }
             regions.push((r.id.clone(), worldgen::shape_mask(&r.shape, &grid)?));
@@ -416,8 +368,7 @@ impl World {
         let active = Active::build(packages, &env, &scenario, &config)?;
         let schema = &active.plan.schema;
         let cells = worldgen::init_cells(schema, &scenario, &grid, &regions)?;
-        let elevation_norm =
-            worldgen::normalized(&cells[schema.cell_field(worldgen::ELEVATION_FIELD).unwrap()]);
+        let elevation_norm = worldgen::normalized(&cells[schema.cell_field(worldgen::ELEVATION_FIELD).unwrap()]);
         let mut entities: Vec<Entities> = schema
             .archetypes
             .iter()
@@ -426,10 +377,7 @@ impl World {
         let mut next_id = 1u64;
         for p in &scenario.populations {
             let Some(ai) = schema.archetype(&p.archetype) else {
-                return Err(format!(
-                    "population references unknown archetype {}",
-                    p.archetype
-                ));
+                return Err(format!("population references unknown archetype {}", p.archetype));
             };
             let mask = match &p.region {
                 Some(r) => Some(
@@ -456,10 +404,7 @@ impl World {
         }
         let total: usize = entities.iter().map(|e| e.len()).sum();
         if total > scenario.population_cap {
-            return Err(format!(
-                "initial population {total} exceeds cap {}",
-                scenario.population_cap
-            ));
+            return Err(format!("initial population {total} exceeds cap {}", scenario.population_cap));
         }
         let nres = schema.resources.len();
         let state = State {
@@ -487,14 +432,9 @@ impl World {
                 ..Default::default()
             })
             .collect();
-        let pool = config.threads.map(|n| {
-            Arc::new(
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(n)
-                    .build()
-                    .expect("thread pool"),
-            )
-        });
+        let pool = config
+            .threads
+            .map(|n| Arc::new(rayon::ThreadPoolBuilder::new().num_threads(n).build().expect("thread pool")));
         let mut w = World {
             scenario,
             active,
@@ -516,6 +456,7 @@ impl World {
             events: VecDeque::new(),
             history: VecDeque::new(),
             stats: Stats::default(),
+            timings: PhaseTimings::default(),
         };
         w.sample();
         Ok(w)
@@ -599,11 +540,11 @@ impl World {
         // Locate the first non-finite intermediate value, in plan order.
         let mut nodes = vec![];
         for ins in &plan.instrs {
-            if ins.outputs.iter().any(|&o| {
-                bufs.slots
-                    .get(o)
-                    .is_some_and(|b| b.iter().any(|v| !v.is_finite()))
-            }) {
+            if ins
+                .outputs
+                .iter()
+                .any(|&o| bufs.slots.get(o).is_some_and(|b| b.iter().any(|v| !v.is_finite())))
+            {
                 nodes.push(ins.source.clone());
                 break;
             }
@@ -623,8 +564,10 @@ impl World {
         let tick = self.state.tick;
         let dt = self.scenario.dt;
         let seed = self.scenario.seed;
-        let parallel = self.config.mode == Mode::Parallel;
+        // Small worlds run serially: scheduling overhead would exceed the work (results are identical either way).
+        let parallel = self.config.mode == Mode::Parallel && self.grid.cells() >= 4096;
 
+        let t_start = std::time::Instant::now();
         // Phase 0: boundary commands on a working copy.
         let due_n = self.pending.iter().take_while(|c| c.tick <= tick).count();
         let due: Vec<Command> = self.pending.drain(..due_n).collect();
@@ -647,19 +590,12 @@ impl World {
         let snap: &State = work.as_ref().unwrap_or(&self.state);
         let schema = &plan.schema;
 
+        let t_commands = std::time::Instant::now();
         // Phase 1: snapshot and forcing.
-        active.weather.fill(
-            &mut self.forcing,
-            seed,
-            tick as f64 * dt,
-            &self.elevation_norm,
-        );
-        let spatial: Vec<SpatialIndex> = snap
-            .entities
-            .iter()
-            .map(|e| SpatialIndex::build(&self.grid, e))
-            .collect();
+        active.weather.fill(&mut self.forcing, seed, tick as f64 * dt, &self.elevation_norm);
+        let spatial: Vec<SpatialIndex> = snap.entities.iter().map(|e| SpatialIndex::build(&self.grid, e)).collect();
 
+        let t_snapshot = std::time::Instant::now();
         // Phase 2: pure evaluation.
         self.bufs.prepare(&plan, &self.grid, snap);
         let mode = self.config.mode;
@@ -680,14 +616,9 @@ impl World {
                 }
             };
         }
-        eval::eval_stage(
-            &inputs!(None, None),
-            &mut self.bufs,
-            Stage::Snapshot,
-            mode,
-            &active.groups,
-        );
+        eval::eval_stage(&inputs!(None, None), &mut self.bufs, Stage::Snapshot, mode, &active.groups);
 
+        let t_eval = std::time::Instant::now();
         // Phases 3-4: proposals and resolution.
         let rin = ResolveInputs {
             plan: &plan,
@@ -702,19 +633,13 @@ impl World {
         let resolved = match resolver::resolve(&rin) {
             Ok(r) => r,
             Err(f) => {
-                let fl = self.fail(
-                    "resolution",
-                    f.message,
-                    f.effect,
-                    f.elements,
-                    &plan,
-                    &self.bufs,
-                );
+                let fl = self.fail("resolution", f.message, f.effect, f.elements, &plan, &self.bufs);
                 self.pending.splice(0..0, due);
                 return Err(fl);
             }
         };
 
+        let t_resolve = std::time::Instant::now();
         // Phase 5: receipt-dependent outcomes.
         eval::eval_stage(
             &inputs!(None, Some(&resolved.receipts)),
@@ -724,6 +649,7 @@ impl World {
             &active.groups,
         );
 
+        let t_receipts = std::time::Instant::now();
         // Phase 6: candidate integration.
         let mut cand = self.spare.take().unwrap_or_else(|| snap.clone());
         cand.clone_from(snap);
@@ -825,6 +751,7 @@ impl World {
         let mut account_in = resolved.account_in.clone();
         let mut account_out = resolved.account_out.clone();
 
+        let t_integrate = std::time::Instant::now();
         // Phase 7: lifecycle on the candidate.
         eval::eval_stage(
             &inputs!(Some(&cand.entities), Some(&resolved.receipts)),
@@ -856,10 +783,7 @@ impl World {
             }
             dying.push(d);
         }
-        let alive_after: usize = dying
-            .iter()
-            .map(|d| d.iter().filter(|x| x.is_none()).count())
-            .sum();
+        let alive_after: usize = dying.iter().map(|d| d.iter().filter(|x| x.is_none()).count()).sum();
         let mut eligible: Vec<(u64, usize, usize)> = vec![]; // (order key, arch, row)
         for (ai, _) in schema.archetypes.iter().enumerate() {
             let Some((cond, legs)) = &wiring.births[ai] else {
@@ -912,8 +836,7 @@ impl World {
             }
         }
         // Births: debit parents atomically, build offspring.
-        let mut newborns: Vec<Vec<(u64, f64, f64, f64, Vec<f64>, Vec<f64>, Lineage)>> =
-            vec![vec![]; schema.archetypes.len()];
+        let mut newborns: Vec<Vec<(u64, f64, f64, f64, Vec<f64>, Vec<f64>, Lineage)>> = vec![vec![]; schema.archetypes.len()];
         for &(_, ai, i) in &eligible {
             let a = &schema.archetypes[ai];
             let (_, legs) = wiring.births[ai].as_ref().unwrap();
@@ -940,10 +863,8 @@ impl World {
             e.lineage[i].offspring += 1;
             let r = |k: u64| rng::draw(seed, tick, STREAM_BIRTH_PLACE, id, k);
             let cs = self.grid.cell_size;
-            let x =
-                (e.x[i] + (r(0) - 0.5) * 2.0 * cs).clamp(0.0, self.grid.extent_x() * (1.0 - 1e-12));
-            let z =
-                (e.z[i] + (r(1) - 0.5) * 2.0 * cs).clamp(0.0, self.grid.extent_z() * (1.0 - 1e-12));
+            let x = (e.x[i] + (r(0) - 0.5) * 2.0 * cs).clamp(0.0, self.grid.extent_x() * (1.0 - 1e-12));
+            let z = (e.z[i] + (r(1) - 0.5) * 2.0 * cs).clamp(0.0, self.grid.extent_z() * (1.0 - 1e-12));
             let heading = r(2) * std::f64::consts::TAU;
             let genome = biology::mutate(a, e.genome_of(i), seed, tick, id);
             let pl = &e.lineage[i];
@@ -976,6 +897,7 @@ impl World {
             }
         }
 
+        let t_lifecycle = std::time::Instant::now();
         // Phase 8: validation, ledger, and commit.
         for (f, info) in schema.cell_fields.iter().enumerate() {
             if info.policy == FieldPolicy::Parameter {
@@ -1010,12 +932,7 @@ impl World {
                     return Err(fl);
                 }
             }
-            if e.x
-                .iter()
-                .chain(&e.z)
-                .chain(&e.heading)
-                .any(|v| !v.is_finite())
-            {
+            if e.x.iter().chain(&e.z).chain(&e.heading).any(|v| !v.is_finite()) {
                 let fl = self.fail(
                     "validation",
                     format!("non-finite position in {}", a.id),
@@ -1040,10 +957,7 @@ impl World {
         cand.tick = tick + 1;
         let totals = resource_totals(schema, &cand);
         let mut ledger = self.ledger.clone();
-        if applied
-            .iter()
-            .any(|(c, _)| matches!(c.kind, CommandKind::ApplyPackages { .. }))
-        {
+        if applied.iter().any(|(c, _)| matches!(c.kind, CommandKind::ApplyPackages { .. })) {
             // Law change: carry ledgers across by resource id, based on the migrated snapshot.
             let base = resource_totals(schema, snap);
             let iv: Vec<f64> = schema
@@ -1059,10 +973,7 @@ impl World {
                 .map(|(r, res)| {
                     let pre = base[r] - iv[r];
                     match self.ledger.iter().find(|l| l.resource == res.id) {
-                        Some(l) => ResourceLedger {
-                            total: pre,
-                            ..l.clone()
-                        },
+                        Some(l) => ResourceLedger { total: pre, ..l.clone() },
                         None => ResourceLedger {
                             resource: res.id.clone(),
                             initial: pre,
@@ -1082,12 +993,13 @@ impl World {
                     ext_out += account_out[a];
                 }
             }
-            let (iv_in, iv_out) = interventions.iter().filter(|(rr, _)| *rr == r).fold(
-                (0.0, 0.0),
-                |(i, o), (_, v): &(usize, f64)| {
-                    if *v >= 0.0 { (i + v, o) } else { (i, o - v) }
-                },
-            );
+            let (iv_in, iv_out) =
+                interventions.iter().filter(|(rr, _)| *rr == r).fold(
+                    (0.0, 0.0),
+                    |(i, o), (_, v): &(usize, f64)| {
+                        if *v >= 0.0 { (i + v, o) } else { (i, o - v) }
+                    },
+                );
             let roundoff = resolved.roundoff[r];
             let prev_total = l.total;
             let exchange = ext_in + ext_out + iv_in + iv_out + roundoff;
@@ -1105,10 +1017,7 @@ impl World {
             if err.abs() > tol {
                 let fl = self.fail(
                     "validation",
-                    format!(
-                        "unexplained {} budget drift {err:e} exceeds tolerance {tol:e}",
-                        res.id
-                    ),
+                    format!("unexplained {} budget drift {err:e} exceeds tolerance {tol:e}", res.id),
                     None,
                     vec![],
                     &plan,
@@ -1123,20 +1032,9 @@ impl World {
             if info.min.is_none() && info.max.is_none() {
                 continue;
             }
-            let (lo, hi) = (
-                info.min.unwrap_or(f64::NEG_INFINITY),
-                info.max.unwrap_or(f64::INFINITY),
-            );
-            let n = cand.cells[f]
-                .iter()
-                .filter(|v| **v < lo || **v > hi)
-                .count();
-            let before = self
-                .stats
-                .range_violations
-                .get(&info.id)
-                .copied()
-                .unwrap_or(0);
+            let (lo, hi) = (info.min.unwrap_or(f64::NEG_INFINITY), info.max.unwrap_or(f64::INFINITY));
+            let n = cand.cells[f].iter().filter(|v| **v < lo || **v > hi).count();
+            let before = self.stats.range_violations.get(&info.id).copied().unwrap_or(0);
             if n > 0 && before == 0 {
                 range_events.push(EventKind::RangeWarning {
                     field: info.id.clone(),
@@ -1146,6 +1044,7 @@ impl World {
             self.stats.range_violations.insert(info.id.clone(), n);
         }
 
+        let t_validate = std::time::Instant::now();
         // Commit.
         drop(work);
         let old = std::mem::replace(&mut self.state, cand);
@@ -1156,16 +1055,23 @@ impl World {
         if plan_changed {
             self.spare = None;
         }
-        self.last = Some(LastTick {
-            resolved,
-            spatial,
-            active,
-        });
+        self.last = Some(LastTick { resolved, spatial, active });
+        let ms = |a: std::time::Instant, b: std::time::Instant| (b - a).as_secs_f64() * 1e3;
+        let t_end = std::time::Instant::now();
+        self.timings = PhaseTimings {
+            commands: ms(t_start, t_commands),
+            snapshot: ms(t_commands, t_snapshot),
+            evaluation: ms(t_snapshot, t_eval),
+            resolution: ms(t_eval, t_resolve),
+            receipts: ms(t_resolve, t_receipts),
+            integration: ms(t_receipts, t_integrate),
+            lifecycle: ms(t_integrate, t_lifecycle),
+            validation: ms(t_lifecycle, t_validate),
+            commit: ms(t_validate, t_end),
+            total: ms(t_start, t_end),
+        };
         for (c, summary) in applied {
-            self.push_event(EventKind::CommandApplied {
-                seq: c.seq,
-                summary,
-            });
+            self.push_event(EventKind::CommandApplied { seq: c.seq, summary });
             self.log.push(c);
         }
         for (c, reason) in rejected {
@@ -1176,9 +1082,7 @@ impl World {
             self.push_event(k);
         }
         if cap_rejected > 0 {
-            self.push_event(EventKind::PopulationCap {
-                rejected: cap_rejected,
-            });
+            self.push_event(EventKind::PopulationCap { rejected: cap_rejected });
         }
         self.stats.births += births_total;
         self.stats.deaths += deaths_total;
@@ -1186,9 +1090,7 @@ impl World {
         for r in death_reasons {
             *self.stats.deaths_by_reason.entry(r).or_default() += 1;
         }
-        if self.config.sample_interval > 0
-            && self.state.tick.is_multiple_of(self.config.sample_interval)
-        {
+        if self.config.sample_interval > 0 && self.state.tick.is_multiple_of(self.config.sample_interval) {
             self.sample();
         }
         Ok(())
@@ -1209,9 +1111,7 @@ impl World {
                 let g = e.genome_of(i);
                 for (t, ti) in a.traits.iter().enumerate() {
                     means[t] += g[t] / m;
-                    let b = (((g[t] - ti.min) / (ti.max - ti.min).max(1e-12)) * 10.0)
-                        .floor()
-                        .clamp(0.0, 9.0) as usize;
+                    let b = (((g[t] - ti.min) / (ti.max - ti.min).max(1e-12)) * 10.0).floor().clamp(0.0, 9.0) as usize;
                     hist[t][b] += 1;
                 }
             }
@@ -1225,11 +1125,7 @@ impl World {
             trait_means,
             trait_hist,
             resource_totals: self.ledger.iter().map(|l| l.total).collect(),
-            field_totals: s
-                .cells
-                .iter()
-                .map(|c| crate::state::compensated_sum(c))
-                .collect(),
+            field_totals: s.cells.iter().map(|c| crate::state::compensated_sum(c)).collect(),
             births: self.stats.births,
             deaths: self.stats.deaths,
             mean_generation,
@@ -1267,17 +1163,12 @@ impl World {
                 let mut regions = schema.regions.clone();
                 regions.push(id.clone());
                 let env = compile_env(&self.scenario, regions);
-                let new =
-                    Active::build(active.packages.clone(), &env, &self.scenario, &self.config)?;
+                let new = Active::build(active.packages.clone(), &env, &self.scenario, &self.config)?;
                 w.regions.push(vec![0.0; self.grid.cells()]);
                 *active = new;
                 Ok(format!("created region {id}"))
             }
-            CommandKind::PaintRegion {
-                region,
-                shape,
-                value,
-            } => {
+            CommandKind::PaintRegion { region, shape, value } => {
                 let Some(r) = schema.region(region) else {
                     return Err(format!("unknown region {region}"));
                 };
@@ -1290,17 +1181,11 @@ impl World {
                 }
                 Ok(format!("painted region {region}"))
             }
-            CommandKind::SetField {
-                field,
-                shape,
-                value,
-            } => {
+            CommandKind::SetField { field, shape, value } => {
                 let Some(f) = schema.cell_field(field) else {
                     return Err(format!("unknown field {field}"));
                 };
-                if schema.cell_fields[f].policy != FieldPolicy::Parameter
-                    || field == worldgen::ELEVATION_FIELD
-                {
+                if schema.cell_fields[f].policy != FieldPolicy::Parameter || field == worldgen::ELEVATION_FIELD {
                     return Err(format!(
                         "{field} is not an editable parameter field; use an explicit intervention for reservoirs"
                     ));
@@ -1314,16 +1199,11 @@ impl World {
                 }
                 Ok(format!("set {field} = {value}"))
             }
-            CommandKind::AddResource {
-                field,
-                shape,
-                amount,
-            } => {
+            CommandKind::AddResource { field, shape, amount } => {
                 let Some(f) = schema.cell_field(field) else {
                     return Err(format!("unknown field {field}"));
                 };
-                let FieldPolicy::Reservoir { resource, capacity } = schema.cell_fields[f].policy
-                else {
+                let FieldPolicy::Reservoir { resource, capacity } = schema.cell_fields[f].policy else {
                     return Err(format!("{field} is not a reservoir"));
                 };
                 if !amount.is_finite() || amount.abs() > 1e15 {
@@ -1350,16 +1230,9 @@ impl World {
                 } else {
                     w.intervention_out[resource] -= t;
                 }
-                Ok(format!(
-                    "intervention: {t:.3} {} into {field}",
-                    schema.resources[resource].unit
-                ))
+                Ok(format!("intervention: {t:.3} {} into {field}", schema.resources[resource].unit))
             }
-            CommandKind::SpawnOrganisms {
-                archetype,
-                shape,
-                count,
-            } => {
+            CommandKind::SpawnOrganisms { archetype, shape, count } => {
                 let Some(ai) = schema.archetype(archetype) else {
                     return Err(format!("unknown archetype {archetype}"));
                 };
@@ -1409,23 +1282,13 @@ impl World {
                 migrate(w, &schema, &new.plan, &self.grid)?;
                 let n = new.plan.instrs.len();
                 *active = new;
-                Ok(format!(
-                    "applied {} packages ({n} instructions)",
-                    packages.len()
-                ))
+                Ok(format!("applied {} packages ({n} instructions)", packages.len()))
             }
         }
     }
 }
 
-pub fn check_param(
-    plan: &Plan,
-    i: usize,
-    value: f64,
-    w: &State,
-    dt: f64,
-    dx: f64,
-) -> Result<(), String> {
+pub fn check_param(plan: &Plan, i: usize, value: f64, w: &State, dt: f64, dx: f64) -> Result<(), String> {
     let p = &plan.params[i];
     if !value.is_finite() || value < p.min || value > p.max {
         return Err(format!(
@@ -1463,9 +1326,7 @@ pub fn migrate(w: &mut State, old: &Schema, plan: &Plan, grid: &Grid) -> Result<
         match old.cell_field(&f.id) {
             Some(oi) => {
                 let of = &old.cell_fields[oi];
-                if of.unit != f.unit
-                    || of.quantity != f.quantity
-                    || std::mem::discriminant(&of.policy) != std::mem::discriminant(&f.policy)
+                if of.unit != f.unit || of.quantity != f.quantity || std::mem::discriminant(&of.policy) != std::mem::discriminant(&f.policy)
                 {
                     return Err(format!(
                         "field {} changes unit, quantity, or policy; that requires an explicit migration or a new experiment",
@@ -1478,10 +1339,7 @@ pub fn migrate(w: &mut State, old: &Schema, plan: &Plan, grid: &Grid) -> Result<
         }
     }
     for (oi, of) in old.cell_fields.iter().enumerate() {
-        if new.cell_field(&of.id).is_none()
-            && matches!(of.policy, FieldPolicy::Reservoir { .. })
-            && w.cells[oi].iter().any(|v| *v != 0.0)
-        {
+        if new.cell_field(&of.id).is_none() && matches!(of.policy, FieldPolicy::Reservoir { .. }) && w.cells[oi].iter().any(|v| *v != 0.0) {
             return Err(format!(
                 "removing populated conserved reservoir {} requires a declared transfer or external sink first",
                 of.id
@@ -1495,10 +1353,7 @@ pub fn migrate(w: &mut State, old: &Schema, plan: &Plan, grid: &Grid) -> Result<
                 let oa = &old.archetypes[oi];
                 let e = &w.entities[oi];
                 if oa.genome_len() != a.genome_len() && !e.is_empty() {
-                    return Err(format!(
-                        "archetype {} changes genome layout while populated",
-                        a.id
-                    ));
+                    return Err(format!("archetype {} changes genome layout while populated", a.id));
                 }
                 let mut ne = e.clone();
                 ne.fields = vec![];
@@ -1534,28 +1389,13 @@ pub fn migrate(w: &mut State, old: &Schema, plan: &Plan, grid: &Grid) -> Result<
             return Err(format!("removing populated archetype {}", oa.id));
         }
     }
-    if old
-        .resources
-        .iter()
-        .map(|r| &r.id)
-        .ne(new.resources.iter().map(|r| &r.id))
-    {
-        let remap = |v: &Vec<f64>| -> Vec<f64> {
-            new.resources
-                .iter()
-                .map(|r| old.resource(&r.id).map_or(0.0, |i| v[i]))
-                .collect()
-        };
+    if old.resources.iter().map(|r| &r.id).ne(new.resources.iter().map(|r| &r.id)) {
+        let remap = |v: &Vec<f64>| -> Vec<f64> { new.resources.iter().map(|r| old.resource(&r.id).map_or(0.0, |i| v[i])).collect() };
         w.intervention_in = remap(&w.intervention_in);
         w.intervention_out = remap(&w.intervention_out);
         w.roundoff = remap(&w.roundoff);
     }
-    let remap_acc = |v: &Vec<f64>| -> Vec<f64> {
-        new.accounts
-            .iter()
-            .map(|a| old.account(&a.id).map_or(0.0, |i| v[i]))
-            .collect()
-    };
+    let remap_acc = |v: &Vec<f64>| -> Vec<f64> { new.accounts.iter().map(|a| old.account(&a.id).map_or(0.0, |i| v[i])).collect() };
     w.account_in = remap_acc(&w.account_in);
     w.account_out = remap_acc(&w.account_out);
     w.cells = cells;

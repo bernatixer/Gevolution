@@ -18,12 +18,7 @@ fn amount_rule(id: &str, from: &str, to: &str, kg: f64) -> Value {
 }
 
 fn accepted(w: &World, effect: &str) -> Vec<Vec<f64>> {
-    let i = w
-        .plan()
-        .effects
-        .iter()
-        .position(|e| e.id == effect)
-        .unwrap();
+    let i = w.plan().effects.iter().position(|e| e.id == effect).unwrap();
     w.last.as_ref().unwrap().resolved.accepted[i].clone()
 }
 
@@ -78,12 +73,7 @@ fn t10_coupled_reaction_scales_every_leg_by_the_limiting_factor() {
     let mut w = world(sc, vec![p], RunConfig::reference());
     w.step().unwrap();
     let r = &w.last.as_ref().unwrap().resolved;
-    let e = w
-        .plan()
-        .effects
-        .iter()
-        .position(|e| e.id == "grow/x")
-        .unwrap();
+    let e = w.plan().effects.iter().position(|e| e.id == "grow/x").unwrap();
     assert_eq!(r.receipts.alpha[e][0], 0.5);
     assert_eq!(field(&w, "soil_water")[0], 1.0);
     assert_eq!(field(&w, "plant_nutrients")[0], 0.5);
@@ -142,13 +132,7 @@ fn t12_rain_and_evaporation_exchange_exactly_their_accepted_amounts() {
             ),
         ],
     );
-    let sc = scenario(
-        3,
-        3,
-        json!({ "surface_water": constant(4.0) }),
-        json!([]),
-        0.001,
-    );
+    let sc = scenario(3, 3, json!({ "surface_water": constant(4.0) }), json!([]), 0.001);
     let mut w = world(sc, vec![p], RunConfig::reference());
     let schema = w.schema().clone();
     let (wi, ai) = (
@@ -197,24 +181,11 @@ fn flow_rule(conductance: f64) -> Value {
 #[test]
 fn t13_equal_heads_produce_no_transport_request() {
     let p = with_rules(base(), vec![flow_rule(5000.0)]);
-    let mut sc = scenario(
-        2,
-        2,
-        json!({ "surface_water": explicit(vec![2e5, 1e5, 2e5, 1e5]) }),
-        json!([]),
-        0.0,
-    );
-    sc.terrain =
-        serde_json::from_value(json!({ "kind": "explicit", "values": [0.0, 1.0, 0.0, 1.0] }))
-            .unwrap();
+    let mut sc = scenario(2, 2, json!({ "surface_water": explicit(vec![2e5, 1e5, 2e5, 1e5]) }), json!([]), 0.0);
+    sc.terrain = serde_json::from_value(json!({ "kind": "explicit", "values": [0.0, 1.0, 0.0, 1.0] })).unwrap();
     let mut w = world(sc, vec![p], RunConfig::reference());
     w.step().unwrap();
-    let e = w
-        .plan()
-        .effects
-        .iter()
-        .position(|e| e.id == "flow/x")
-        .unwrap();
+    let e = w.plan().effects.iter().position(|e| e.id == "flow/x").unwrap();
     let req = &w.last.as_ref().unwrap().resolved.receipts.requested[e][0];
     assert!(req.iter().all(|v| *v == 0.0), "{req:?}");
     assert_eq!(field(&w, "surface_water"), &[2e5, 1e5, 2e5, 1e5]);
@@ -222,8 +193,7 @@ fn t13_equal_heads_produce_no_transport_request() {
 
 fn river_world(config: RunConfig, size: usize) -> World {
     let root = sim_core::assets::asset_root();
-    let (mut sc, pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (mut sc, pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     sc.grid.width = size;
     sc.grid.height = size;
     sc.regions.clear();
@@ -246,12 +216,7 @@ fn t14_chunked_parallel_execution_matches_unchunked_reference() {
     for _ in 0..60 {
         a.step().unwrap();
         b.step().unwrap();
-        assert_eq!(
-            a.state.hash(),
-            b.state.hash(),
-            "diverged at tick {}",
-            a.tick()
-        );
+        assert_eq!(a.state.hash(), b.state.hash(), "diverged at tick {}", a.tick());
     }
 }
 
@@ -290,7 +255,9 @@ fn t15_closed_water_soak_100k_ticks() {
         json!([]),
         0.0,
     );
-    sc.terrain = serde_json::from_value(json!({ "kind": "valley", "relief": 20.0, "valley_depth": 4.0, "basin_depth": 5.0, "roughness": 2.0 })).unwrap();
+    sc.terrain =
+        serde_json::from_value(json!({ "kind": "valley", "relief": 20.0, "valley_depth": 4.0, "basin_depth": 5.0, "roughness": 2.0 }))
+            .unwrap();
     let mut w = world(
         sc,
         vec![p],
@@ -313,11 +280,7 @@ fn t15_closed_water_soak_100k_ticks() {
     for f in ["surface_water", "soil_water"] {
         assert!(field(&w, f).iter().all(|v| *v >= 0.0));
     }
-    assert!(
-        w.state.roundoff[0] < 1e-6,
-        "roundoff corrections {}",
-        w.state.roundoff[0]
-    );
+    assert!(w.state.roundoff[0] < 1e-6, "roundoff corrections {}", w.state.roundoff[0]);
 }
 
 #[test]
@@ -340,20 +303,11 @@ fn t16_diffusion_converges_when_the_timestep_is_halved() {
     let init: Vec<f64> = (0..n * n)
         .map(|c| {
             let (x, z) = ((c % n) as f64, (c / n) as f64);
-            290.0
-                + 5.0
-                    * (std::f64::consts::PI * (x + 0.5) / n as f64).cos()
-                    * (std::f64::consts::PI * (z + 0.5) / n as f64).cos()
+            290.0 + 5.0 * (std::f64::consts::PI * (x + 0.5) / n as f64).cos() * (std::f64::consts::PI * (z + 0.5) / n as f64).cos()
         })
         .collect();
     let run = |dt: f64| -> Vec<f64> {
-        let mut sc = scenario(
-            n,
-            n,
-            json!({ "temperature": explicit(init.clone()) }),
-            json!([]),
-            0.0,
-        );
+        let mut sc = scenario(n, n, json!({ "temperature": explicit(init.clone()) }), json!([]), 0.0);
         sc.dt = dt;
         let mut w = world(sc, vec![p.clone()], RunConfig::reference());
         let ticks = (10.0 / dt).round() as u64;
@@ -361,19 +315,10 @@ fn t16_diffusion_converges_when_the_timestep_is_halved() {
         field(&w, "temperature").to_vec()
     };
     let reference = run(0.25 / 32.0);
-    let err = |v: &[f64]| {
-        v.iter()
-            .zip(&reference)
-            .map(|(a, b)| (a - b).powi(2))
-            .sum::<f64>()
-            .sqrt()
-    };
+    let err = |v: &[f64]| v.iter().zip(&reference).map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt();
     let (e1, e2) = (err(&run(0.25)), err(&run(0.125)));
     println!("T16: error at dt=0.25: {e1:e}, at dt=0.125: {e2:e}");
-    assert!(
-        e2 < e1 * 0.7,
-        "halving dt should reduce error: {e1} -> {e2}"
-    );
+    assert!(e2 < e1 * 0.7, "halving dt should reduce error: {e1} -> {e2}");
 }
 
 fn scoped_rain(id: &str, region: &str) -> Value {
@@ -413,27 +358,13 @@ fn t17_region_overlap_is_additive_and_order_independent() {
 fn t18_cross_region_transport_debits_and_credits_both_endpoints() {
     let mut f = flow_rule(5000.0);
     f["scope"] = json!({ "region": "a" });
-    let regions =
-        json!([{ "id": "a", "shape": { "kind": "rect", "x0": 0, "z0": 0, "x1": 1, "z1": 2 } }]);
-    let sc = scenario(
-        2,
-        2,
-        json!({ "surface_water": explicit(vec![1e5, 0.0, 1e5, 0.0]) }),
-        regions,
-        0.0,
-    );
-    let mut w = world(
-        sc,
-        vec![with_rules(base(), vec![f])],
-        RunConfig::reference(),
-    );
+    let regions = json!([{ "id": "a", "shape": { "kind": "rect", "x0": 0, "z0": 0, "x1": 1, "z1": 2 } }]);
+    let sc = scenario(2, 2, json!({ "surface_water": explicit(vec![1e5, 0.0, 1e5, 0.0]) }), regions, 0.0);
+    let mut w = world(sc, vec![with_rules(base(), vec![f])], RunConfig::reference());
     w.step().unwrap();
     let v = field(&w, "surface_water");
     // Edge coverage is the mean of its endpoints: 0.5 across the region boundary.
-    assert!(
-        v[1] > 0.0 && v[3] > 0.0,
-        "destination outside the region is credited: {v:?}"
-    );
+    assert!(v[1] > 0.0 && v[3] > 0.0, "destination outside the region is credited: {v:?}");
     assert_eq!(v[0] + v[1], 1e5);
     assert_eq!(v[2] + v[3], 1e5);
     assert!(w.ledger[0].cumulative_error.abs() < 1e-9);
@@ -442,8 +373,7 @@ fn t18_cross_region_transport_debits_and_credits_both_endpoints() {
 #[test]
 fn m1_rule_registration_order_does_not_change_results() {
     let root = sim_core::assets::asset_root();
-    let (mut sc, mut pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (mut sc, mut pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     sc.grid.width = 24;
     sc.grid.height = 24;
     sc.regions.clear();
@@ -475,11 +405,7 @@ fn m1_explicit_feedback_works_across_ticks() {
             ]),
         )],
     );
-    let mut w = world(
-        scenario(2, 2, json!({}), json!([]), 0.0),
-        vec![p],
-        RunConfig::reference(),
-    );
+    let mut w = world(scenario(2, 2, json!({}), json!([]), 0.0), vec![p], RunConfig::reference());
     w.run(7).unwrap();
     assert!(field(&w, "memory").iter().all(|v| *v == 7.0));
 }
@@ -514,22 +440,13 @@ fn m1_failed_tick_leaves_committed_state_untouched() {
     );
     let mut w = world(sc, vec![p], RunConfig::reference());
     let before = w.state.hash();
-    let seq = w.submit(
-        sim_core::commands::CommandKind::CreateRegion { id: "late".into() },
-        None,
-    );
+    let seq = w.submit(sim_core::commands::CommandKind::CreateRegion { id: "late".into() }, None);
     let f = w.step().unwrap_err();
     assert_eq!(w.state.hash(), before);
     assert_eq!(w.tick(), 0);
     assert!(f.nodes.iter().any(|n| n == "bad/l"), "{f}");
-    assert!(
-        w.pending.iter().any(|c| c.seq == seq),
-        "boundary commands are restored"
-    );
-    assert!(
-        w.step().is_err(),
-        "the experiment stays paused until cleared"
-    );
+    assert!(w.pending.iter().any(|c| c.seq == seq), "boundary commands are restored");
+    assert!(w.step().is_err(), "the experiment stays paused until cleared");
 }
 
 #[test]
@@ -552,28 +469,11 @@ fn m2_basin_pools_to_a_level_surface_without_growing_oscillation() {
             0.02 * (x * x + z * z)
         })
         .collect();
-    let mut sc = scenario(
-        n,
-        n,
-        json!({ "surface_water": constant(20000.0) }),
-        json!([]),
-        0.0,
-    );
-    sc.terrain =
-        serde_json::from_value(json!({ "kind": "explicit", "values": bowl.clone() })).unwrap();
-    let mut w = world(
-        sc,
-        vec![with_rules(base(), vec![flow_rule(5000.0)])],
-        RunConfig::reference(),
-    );
+    let mut sc = scenario(n, n, json!({ "surface_water": constant(20000.0) }), json!([]), 0.0);
+    sc.terrain = serde_json::from_value(json!({ "kind": "explicit", "values": bowl.clone() })).unwrap();
+    let mut w = world(sc, vec![with_rules(base(), vec![flow_rule(5000.0)])], RunConfig::reference());
     let total0 = w.ledger[0].total;
-    let head = |w: &World| -> Vec<f64> {
-        field(w, "surface_water")
-            .iter()
-            .zip(&bowl)
-            .map(|(m, e)| e + m / 1e5)
-            .collect()
-    };
+    let head = |w: &World| -> Vec<f64> { field(w, "surface_water").iter().zip(&bowl).map(|(m, e)| e + m / 1e5).collect() };
     let spread = |w: &World| {
         let wet: Vec<f64> = head(w)
             .into_iter()
@@ -589,14 +489,8 @@ fn m2_basin_pools_to_a_level_surface_without_growing_oscillation() {
     w.run(4000).unwrap();
     let late = spread(&w);
     println!("basin head spread: {early:e} -> {late:e}");
-    assert!(
-        late < 1e-3 && late <= early,
-        "water surface levels out: {early} -> {late}"
-    );
+    assert!(late < 1e-3 && late <= early, "water surface levels out: {early} -> {late}");
     let v = field(&w, "surface_water");
-    assert!(
-        v[0] < v[n * n / 2 + n / 2],
-        "water pools at the bottom of the bowl"
-    );
+    assert!(v[0] < v[n * n / 2 + n / 2], "water pools at the bottom of the bowl");
     assert!((w.ledger[0].total - total0).abs() < 1e-6);
 }

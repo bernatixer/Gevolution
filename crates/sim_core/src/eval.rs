@@ -24,9 +24,7 @@ pub struct SpatialIndex {
 impl SpatialIndex {
     pub fn build(grid: &Grid, e: &Entities) -> SpatialIndex {
         let n = grid.cells();
-        let cell_of: Vec<u32> = (0..e.len())
-            .map(|i| grid.cell_at(e.x[i], e.z[i]) as u32)
-            .collect();
+        let cell_of: Vec<u32> = (0..e.len()).map(|i| grid.cell_at(e.x[i], e.z[i]) as u32).collect();
         let mut start = vec![0u32; n + 1];
         for &c in &cell_of {
             start[c as usize + 1] += 1;
@@ -40,11 +38,7 @@ impl SpatialIndex {
             members[fill[c as usize] as usize] = row as u32;
             fill[c as usize] += 1;
         }
-        SpatialIndex {
-            cell_of,
-            start,
-            members,
-        }
+        SpatialIndex { cell_of, start, members }
     }
     #[inline]
     pub fn in_cell(&self, c: usize) -> &[u32] {
@@ -115,16 +109,13 @@ pub fn fuse_groups(plan: &Plan) -> Vec<(Stage, Vec<usize>)> {
     let mut groups: Vec<(Stage, Vec<usize>)> = vec![];
     let mut produced: std::collections::HashSet<Slot> = Default::default();
     for (k, ins) in plan.instrs.iter().enumerate() {
-        let standalone =
-            matches!(ins.op, Op::Brain(_)) || ins.op.is_reduction() || ins.dom == Dom::Uniform;
+        let standalone = matches!(ins.op, Op::Brain(_)) || ins.op.is_reduction() || ins.dom == Dom::Uniform;
         let can_join = groups.last().is_some_and(|(st, g)| {
             let last = &plan.instrs[*g.last().unwrap()];
             *st == ins.stage
                 && last.dom == ins.dom
                 && !standalone
-                && !(matches!(last.op, Op::Brain(_))
-                    || last.op.is_reduction()
-                    || last.dom == Dom::Uniform)
+                && !(matches!(last.op, Op::Brain(_)) || last.op.is_reduction() || last.dom == Dom::Uniform)
                 && (ins.op.is_pointwise() || ins.inputs.iter().all(|i| !produced.contains(i)))
         });
         if !can_join {
@@ -137,13 +128,7 @@ pub fn fuse_groups(plan: &Plan) -> Vec<(Stage, Vec<usize>)> {
     groups
 }
 
-pub fn eval_stage(
-    inp: &EvalInputs,
-    bufs: &mut Buffers,
-    stage: Stage,
-    mode: Mode,
-    groups: &[(Stage, Vec<usize>)],
-) {
+pub fn eval_stage(inp: &EvalInputs, bufs: &mut Buffers, stage: Stage, mode: Mode, groups: &[(Stage, Vec<usize>)]) {
     match mode {
         Mode::Reference => {
             for (k, ins) in inp.plan.instrs.iter().enumerate() {
@@ -159,10 +144,11 @@ pub fn eval_stage(
                 }
                 let first = &inp.plan.instrs[g[0]];
                 let n = dom_len(first.dom, inp.grid, inp.state);
-                if g.len() == 1
-                    && (first.dom == Dom::Uniform || first.op.is_reduction() || n <= CHUNK)
-                {
-                    eval_whole(inp, bufs, g[0]);
+                if first.dom == Dom::Uniform || first.op.is_reduction() || n <= CHUNK {
+                    // Small or scalar groups: serial evaluation is cheaper than a parallel dispatch.
+                    for &k in g {
+                        eval_whole(inp, bufs, k);
+                    }
                     continue;
                 }
                 if matches!(first.op, Op::Brain(_)) {
@@ -171,36 +157,27 @@ pub fn eval_stage(
                 }
                 // Take the group's outputs out so inputs can be shared immutably.
                 let outs: Vec<Slot> = g.iter().map(|&k| inp.plan.instrs[k].outputs[0]).collect();
-                let mut taken: Vec<Vec<f64>> = outs
-                    .iter()
-                    .map(|&s| std::mem::take(&mut bufs.slots[s]))
-                    .collect();
+                let mut taken: Vec<Vec<f64>> = outs.iter().map(|&s| std::mem::take(&mut bufs.slots[s])).collect();
                 {
                     let shared = &bufs.slots;
                     let n_chunks = n.div_ceil(CHUNK);
                     // Split each output into chunks, then transpose so each task owns one chunk of every output.
-                    let mut per_chunk: Vec<Vec<&mut [f64]>> =
-                        (0..n_chunks).map(|_| Vec::with_capacity(g.len())).collect();
+                    let mut per_chunk: Vec<Vec<&mut [f64]>> = (0..n_chunks).map(|_| Vec::with_capacity(g.len())).collect();
                     for t in taken.iter_mut() {
                         for (ci, ch) in t.chunks_mut(CHUNK).enumerate() {
                             per_chunk[ci].push(ch);
                         }
                     }
-                    per_chunk
-                        .into_par_iter()
-                        .enumerate()
-                        .for_each(|(ci, mut outs_chunk)| {
-                            let lo = ci * CHUNK;
-                            for (j, &k) in g.iter().enumerate() {
-                                let ins = &inp.plan.instrs[k];
-                                // Inputs produced earlier in this group are read from the chunk-local outputs.
-                                let (done, rest) = outs_chunk.split_at_mut(j);
-                                let local = |s: Slot| -> Option<&[f64]> {
-                                    outs.iter().take(j).position(|&o| o == s).map(|p| &*done[p])
-                                };
-                                kernel(inp, ins, shared, &local, lo, rest[0]);
-                            }
-                        });
+                    per_chunk.into_par_iter().enumerate().for_each(|(ci, mut outs_chunk)| {
+                        let lo = ci * CHUNK;
+                        for (j, &k) in g.iter().enumerate() {
+                            let ins = &inp.plan.instrs[k];
+                            // Inputs produced earlier in this group are read from the chunk-local outputs.
+                            let (done, rest) = outs_chunk.split_at_mut(j);
+                            let local = |s: Slot| -> Option<&[f64]> { outs.iter().take(j).position(|&o| o == s).map(|p| &*done[p]) };
+                            kernel(inp, ins, shared, &local, lo, rest[0]);
+                        }
+                    });
                 }
                 for (s, t) in outs.iter().zip(taken) {
                     bufs.slots[*s] = t;
@@ -213,11 +190,7 @@ pub fn eval_stage(
 fn eval_whole(inp: &EvalInputs, bufs: &mut Buffers, k: usize) {
     let ins = &inp.plan.instrs[k];
     if let Op::Brain(a) = ins.op {
-        let mut outs: Vec<Vec<f64>> = ins
-            .outputs
-            .iter()
-            .map(|&s| std::mem::take(&mut bufs.slots[s]))
-            .collect();
+        let mut outs: Vec<Vec<f64>> = ins.outputs.iter().map(|&s| std::mem::take(&mut bufs.slots[s])).collect();
         eval_brain(inp, &bufs.slots, a, &ins.inputs, &mut outs);
         for (s, o) in ins.outputs.iter().zip(outs) {
             bufs.slots[*s] = o;
@@ -236,14 +209,7 @@ fn at(v: &[f64], i: usize) -> f64 {
 }
 
 /// Evaluate one instruction for elements `lo .. lo + out.len()`.
-fn kernel<'b>(
-    inp: &EvalInputs,
-    ins: &Instr,
-    bufs: &'b [Vec<f64>],
-    local: &dyn Fn(Slot) -> Option<&'b [f64]>,
-    lo: usize,
-    out: &mut [f64],
-) {
+fn kernel<'b>(inp: &EvalInputs, ins: &Instr, bufs: &'b [Vec<f64>], local: &dyn Fn(Slot) -> Option<&'b [f64]>, lo: usize, out: &mut [f64]) {
     let n = out.len();
     let st = inp.state;
     let g = inp.grid;
@@ -276,10 +242,7 @@ fn kernel<'b>(
                 }
                 _ => {
                     for k in 0..n {
-                        out[k] = $f(
-                            if sa { a[0] } else { a[oa + k] },
-                            if sb { b[0] } else { b[ob + k] },
-                        );
+                        out[k] = $f(if sa { a[0] } else { a[oa + k] }, if sb { b[0] } else { b[ob + k] });
                     }
                 }
             }
@@ -300,13 +263,9 @@ fn kernel<'b>(
         Op::Const(v) => out.fill(*v),
         Op::Param(p) => out.fill(st.params[*p]),
         Op::ReadCell(f) => out.copy_from_slice(&st.cells[*f][lo..lo + n]),
-        Op::ReadEntity(a, f) => {
-            out.copy_from_slice(&st.entities[*a as usize].fields[*f][lo..lo + n])
-        }
+        Op::ReadEntity(a, f) => out.copy_from_slice(&st.entities[*a as usize].fields[*f][lo..lo + n]),
         Op::CandidateEntity(a, f) => {
-            let c = inp
-                .candidate
-                .expect("candidate stage evaluated without candidate state");
+            let c = inp.candidate.expect("candidate stage evaluated without candidate state");
             out.copy_from_slice(&c[*a as usize].fields[*f][lo..lo + n]);
         }
         Op::Trait(a, t) => {
@@ -435,11 +394,7 @@ fn kernel<'b>(
                         cnt += 1.0;
                     }
                 }
-                out[k] = if mean {
-                    if cnt > 0.0 { s / cnt } else { 0.0 }
-                } else {
-                    s
-                };
+                out[k] = if mean { if cnt > 0.0 { s / cnt } else { 0.0 } } else { s };
             }
         }
         Op::RegionMean(r) | Op::RegionSum(r) => {
@@ -475,9 +430,7 @@ fn kernel<'b>(
         }
         Op::Sample => {
             let (a, _) = input(0);
-            let Dom::Entities(ar) = ins.dom else {
-                unreachable!()
-            };
+            let Dom::Entities(ar) = ins.dom else { unreachable!() };
             let sp = &inp.spatial[ar as usize];
             for k in 0..n {
                 out[k] = at(a, sp.cell_of[lo + k] as usize);
@@ -485,9 +438,7 @@ fn kernel<'b>(
         }
         Op::SampleOffset { forward, lateral } => {
             let (a, _) = input(0);
-            let Dom::Entities(ar) = ins.dom else {
-                unreachable!()
-            };
+            let Dom::Entities(ar) = ins.dom else { unreachable!() };
             let e = &st.entities[ar as usize];
             for k in 0..n {
                 let i = lo + k;
@@ -498,9 +449,7 @@ fn kernel<'b>(
             }
         }
         Op::Crowding(r) => {
-            let Dom::Entities(ar) = ins.dom else {
-                unreachable!()
-            };
+            let Dom::Entities(ar) = ins.dom else { unreachable!() };
             let sp = &inp.spatial[ar as usize];
             let r = *r as isize;
             let (w, h) = (g.width as isize, g.height as isize);
@@ -550,9 +499,7 @@ fn kernel<'b>(
             }
         }
         Op::Receipt { effect, leg, form } => {
-            let r = inp
-                .receipts
-                .expect("receipt stage evaluated without receipts");
+            let r = inp.receipts.expect("receipt stage evaluated without receipts");
             let alpha = &r.alpha[*effect];
             match form {
                 ReceiptForm::Fraction => out.copy_from_slice(&alpha[lo..lo + n]),
@@ -560,11 +507,7 @@ fn kernel<'b>(
                     let req = &r.requested[*effect][*leg];
                     for k in 0..n {
                         let v = alpha[lo + k] * req[lo + k];
-                        out[k] = if *form == ReceiptForm::Rate {
-                            v / inp.dt
-                        } else {
-                            v
-                        };
+                        out[k] = if *form == ReceiptForm::Rate { v / inp.dt } else { v };
                     }
                 }
             }

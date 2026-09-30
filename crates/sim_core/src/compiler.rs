@@ -97,10 +97,7 @@ pub struct AccountInfo {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum FieldPolicy {
-    Reservoir {
-        resource: usize,
-        capacity: Option<usize>,
-    },
+    Reservoir { resource: usize, capacity: Option<usize> },
     Integrated,
     NextValue,
     Parameter,
@@ -245,8 +242,7 @@ impl CompileEnv {
         (self.width * self.height) as u64
     }
     pub fn edges(&self) -> u64 {
-        (self.width.saturating_sub(1) * self.height + self.width * self.height.saturating_sub(1))
-            as u64
+        (self.width.saturating_sub(1) * self.height + self.width * self.height.saturating_sub(1)) as u64
     }
 }
 
@@ -265,21 +261,11 @@ pub fn compile(packages: &[Package], env: &CompileEnv) -> Result<Plan, Vec<Diagn
     sorted.sort_by(|a, b| a.package_id.cmp(&b.package_id));
     let mut c = Compiler::new(sorted, env);
     c.run();
-    let errors: Vec<Diagnostic> = c
-        .diags
-        .iter()
-        .filter(|d| d.severity == Severity::Error)
-        .cloned()
-        .collect();
+    let errors: Vec<Diagnostic> = c.diags.iter().filter(|d| d.severity == Severity::Error).cloned().collect();
     if !errors.is_empty() {
         return Err(errors);
     }
-    let warnings = c
-        .diags
-        .iter()
-        .filter(|d| d.severity == Severity::Warning)
-        .cloned()
-        .collect();
+    let warnings = c.diags.iter().filter(|d| d.severity == Severity::Warning).cloned().collect();
     let cost = c.cost.clone().unwrap();
     Ok(Plan {
         schema: c.schema,
@@ -422,14 +408,9 @@ impl<'a> Compiler<'a> {
     }
 
     fn headers(&mut self) {
-        let ids: BTreeSet<&str> = self
-            .packages
-            .iter()
-            .map(|p| p.package_id.as_str())
-            .collect();
+        let ids: BTreeSet<&str> = self.packages.iter().map(|p| p.package_id.as_str()).collect();
         if ids.len() != self.packages.len() {
-            self.diags
-                .push(err("E_DUPLICATE_PACKAGE", "duplicate package ids"));
+            self.diags.push(err("E_DUPLICATE_PACKAGE", "duplicate package ids"));
         }
         for p in &self.packages {
             if p.schema_version != PACKAGE_SCHEMA_VERSION {
@@ -442,10 +423,7 @@ impl<'a> Compiler<'a> {
                 ));
             }
             if !valid_id(&p.package_id) {
-                self.diags.push(err(
-                    "E_ID",
-                    format!("invalid package id '{}'", p.package_id),
-                ));
+                self.diags.push(err("E_ID", format!("invalid package id '{}'", p.package_id)));
             }
             for r in &p.requires {
                 let base = r.rsplit_once(".v").map(|(b, _)| b).unwrap_or(r);
@@ -460,10 +438,7 @@ impl<'a> Compiler<'a> {
                 if !SUPPORTED_CAPABILITIES.contains(&cap.as_str()) {
                     self.diags.push(err(
                         "E_CAPABILITY",
-                        format!(
-                            "package {} requires unsupported capability {}",
-                            p.package_id, cap
-                        ),
+                        format!("package {} requires unsupported capability {}", p.package_id, cap),
                     ));
                 }
             }
@@ -472,25 +447,14 @@ impl<'a> Compiler<'a> {
         if rule_count > self.env.budgets.max_rules {
             self.diags.push(err(
                 "E_BUDGET_RULES",
-                format!(
-                    "{rule_count} rules exceeds limit {}",
-                    self.env.budgets.max_rules
-                ),
+                format!("{rule_count} rules exceeds limit {}", self.env.budgets.max_rules),
             ));
         }
-        let node_count: usize = self
-            .packages
-            .iter()
-            .flat_map(|p| &p.rules)
-            .map(|r| r.nodes.len())
-            .sum();
+        let node_count: usize = self.packages.iter().flat_map(|p| &p.rules).map(|r| r.nodes.len()).sum();
         if node_count > self.env.budgets.max_nodes {
             self.diags.push(err(
                 "E_BUDGET_NODES",
-                format!(
-                    "{node_count} nodes exceeds the expanded-node limit {}",
-                    self.env.budgets.max_nodes
-                ),
+                format!("{node_count} nodes exceeds the expanded-node limit {}", self.env.budgets.max_nodes),
             ));
         }
     }
@@ -510,10 +474,7 @@ impl<'a> Compiler<'a> {
         for p in &pk {
             for r in &p.resources {
                 if self.schema.resource(&r.id).is_some() {
-                    self.diags.push(err(
-                        "E_DUPLICATE",
-                        format!("resource {} declared twice", r.id),
-                    ));
+                    self.diags.push(err("E_DUPLICATE", format!("resource {} declared twice", r.id)));
                     continue;
                 }
                 let unit = self.parse_unit(&r.unit, &format!("resource {}", r.id));
@@ -528,24 +489,17 @@ impl<'a> Compiler<'a> {
         for p in &pk {
             for a in &p.accounts {
                 if !a.id.starts_with("external.") {
-                    self.diags.push(err(
-                        "E_ACCOUNT",
-                        format!("account id {} must start with 'external.'", a.id),
-                    ));
+                    self.diags
+                        .push(err("E_ACCOUNT", format!("account id {} must start with 'external.'", a.id)));
                     continue;
                 }
                 if self.schema.account(&a.id).is_some() {
-                    self.diags.push(err(
-                        "E_DUPLICATE",
-                        format!("account {} declared twice", a.id),
-                    ));
+                    self.diags.push(err("E_DUPLICATE", format!("account {} declared twice", a.id)));
                     continue;
                 }
                 let Some(res) = self.schema.resource(&a.resource) else {
-                    self.diags.push(err(
-                        "E_ACCOUNT",
-                        format!("account {} uses unknown resource {}", a.id, a.resource),
-                    ));
+                    self.diags
+                        .push(err("E_ACCOUNT", format!("account {} uses unknown resource {}", a.id, a.resource)));
                     continue;
                 };
                 let (src, sink) = match a.direction.as_str() {
@@ -553,19 +507,12 @@ impl<'a> Compiler<'a> {
                     "sink" => (false, true),
                     "both" => (true, true),
                     d => {
-                        self.diags.push(err(
-                            "E_ACCOUNT",
-                            format!("account {} has invalid direction {d}", a.id),
-                        ));
+                        self.diags
+                            .push(err("E_ACCOUNT", format!("account {} has invalid direction {d}", a.id)));
                         continue;
                     }
                 };
-                if src
-                    && !p
-                        .capabilities
-                        .iter()
-                        .any(|c| c == "sandbox.external_source")
-                {
+                if src && !p.capabilities.iter().any(|c| c == "sandbox.external_source") {
                     self.diags.push(err(
                         "E_EXTERNAL_SOURCE",
                         format!("account {} creates resource from outside the world; package {} must require capability sandbox.external_source", a.id, p.package_id),
@@ -584,10 +531,7 @@ impl<'a> Compiler<'a> {
             for f in &p.fields {
                 if let Some(fi) = self.field_info(f, false) {
                     if self.schema.cell_field(&fi.id).is_some() {
-                        self.diags.push(err(
-                            "E_DUPLICATE",
-                            format!("field {} declared twice", fi.id),
-                        ));
+                        self.diags.push(err("E_DUPLICATE", format!("field {} declared twice", fi.id)));
                     } else {
                         self.schema.cell_fields.push(fi);
                     }
@@ -599,10 +543,7 @@ impl<'a> Compiler<'a> {
                     "uniform" => false,
                     "cells" => true,
                     d => {
-                        self.diags.push(err(
-                            "E_DOMAIN",
-                            format!("forcing {} has invalid domain {d}", f.id),
-                        ));
+                        self.diags.push(err("E_DOMAIN", format!("forcing {} has invalid domain {d}", f.id)));
                         false
                     }
                 };
@@ -628,37 +569,23 @@ impl<'a> Compiler<'a> {
         // Resolve cell reservoir capacities (must be parameter fields with the same unit).
         for i in 0..self.schema.cell_fields.len() {
             let f = self.schema.cell_fields[i].clone();
-            let decl = pk
-                .iter()
-                .flat_map(|p| &p.fields)
-                .find(|d| d.id == f.id)
-                .unwrap();
-            if let Policy::Reservoir {
-                capacity: Some(cap),
-                ..
-            } = &decl.policy
-            {
+            let decl = pk.iter().flat_map(|p| &p.fields).find(|d| d.id == f.id).unwrap();
+            if let Policy::Reservoir { capacity: Some(cap), .. } = &decl.policy {
                 match self.schema.cell_field(cap) {
                     Some(ci) => {
                         let cf = &self.schema.cell_fields[ci];
                         if cf.policy != FieldPolicy::Parameter || cf.unit != f.unit {
                             self.diags.push(err(
                                 "E_CAPACITY",
-                                format!(
-                                    "capacity {cap} of {} must be a parameter field with unit {}",
-                                    f.id, f.unit
-                                ),
+                                format!("capacity {cap} of {} must be a parameter field with unit {}", f.id, f.unit),
                             ));
-                        } else if let FieldPolicy::Reservoir { capacity, .. } =
-                            &mut self.schema.cell_fields[i].policy
-                        {
+                        } else if let FieldPolicy::Reservoir { capacity, .. } = &mut self.schema.cell_fields[i].policy {
                             *capacity = Some(ci);
                         }
                     }
-                    None => self.diags.push(err(
-                        "E_CAPACITY",
-                        format!("unknown capacity field {cap} for {}", f.id),
-                    )),
+                    None => self
+                        .diags
+                        .push(err("E_CAPACITY", format!("unknown capacity field {cap} for {}", f.id))),
                 }
             }
         }
@@ -671,8 +598,7 @@ impl<'a> Compiler<'a> {
 
     fn field_info(&mut self, f: &FieldDecl, entity: bool) -> Option<FieldInfo> {
         if !valid_id(&f.id) {
-            self.diags
-                .push(err("E_ID", format!("invalid field id '{}'", f.id)));
+            self.diags.push(err("E_ID", format!("invalid field id '{}'", f.id)));
             return None;
         }
         let unit = self.parse_unit(&f.unit, &format!("field {}", f.id));
@@ -682,10 +608,8 @@ impl<'a> Compiler<'a> {
             match self.env.grids.iter().position(|g| *g == f.grid) {
                 Some(g) => g as u16,
                 None => {
-                    self.diags.push(err(
-                        "E_GRID",
-                        format!("field {} is on unknown grid {}", f.id, f.grid),
-                    ));
+                    self.diags
+                        .push(err("E_GRID", format!("field {} is on unknown grid {}", f.id, f.grid)));
                     return None;
                 }
             }
@@ -693,10 +617,8 @@ impl<'a> Compiler<'a> {
         let policy = match &f.policy {
             Policy::Reservoir { resource, .. } => {
                 let Some(r) = self.schema.resource(resource) else {
-                    self.diags.push(err(
-                        "E_RESOURCE",
-                        format!("field {} uses unknown resource {resource}", f.id),
-                    ));
+                    self.diags
+                        .push(err("E_RESOURCE", format!("field {} uses unknown resource {resource}", f.id)));
                     return None;
                 };
                 if self.schema.resources[r].unit != unit {
@@ -709,10 +631,8 @@ impl<'a> Compiler<'a> {
                     ));
                 }
                 if f.quantity.as_deref().is_some_and(|q| q != resource) {
-                    self.diags.push(err(
-                        "E_QUANTITY",
-                        format!("reservoir {} must carry quantity {resource}", f.id),
-                    ));
+                    self.diags
+                        .push(err("E_QUANTITY", format!("reservoir {} must carry quantity {resource}", f.id)));
                 }
                 FieldPolicy::Reservoir {
                     resource: r,
@@ -724,10 +644,7 @@ impl<'a> Compiler<'a> {
             Policy::Parameter => FieldPolicy::Parameter,
         };
         if !f.default.is_finite() {
-            self.diags.push(err(
-                "E_VALUE",
-                format!("field {} default is not finite", f.id),
-            ));
+            self.diags.push(err("E_VALUE", format!("field {} default is not finite", f.id)));
         }
         let quantity = match &f.policy {
             Policy::Reservoir { resource, .. } => Some(resource.clone()),
@@ -748,19 +665,13 @@ impl<'a> Compiler<'a> {
 
     fn archetype(&mut self, a: &ArchetypeDecl) {
         if self.schema.archetype(&a.id).is_some() {
-            self.diags.push(err(
-                "E_DUPLICATE",
-                format!("archetype {} declared twice", a.id),
-            ));
+            self.diags.push(err("E_DUPLICATE", format!("archetype {} declared twice", a.id)));
             return;
         }
         if a.brain.backend != "mlp.tanh.v1" {
             self.diags.push(err(
                 "E_CAPABILITY",
-                format!(
-                    "archetype {} uses unsupported brain backend {}",
-                    a.id, a.brain.backend
-                ),
+                format!("archetype {} uses unsupported brain backend {}", a.id, a.brain.backend),
             ));
         }
         if a.brain.inputs == 0
@@ -770,19 +681,15 @@ impl<'a> Compiler<'a> {
             || a.brain.outputs == 0
             || a.brain.outputs > 32
         {
-            self.diags.push(err(
-                "E_BRAIN",
-                format!("archetype {} brain dimensions out of bounds", a.id),
-            ));
+            self.diags
+                .push(err("E_BRAIN", format!("archetype {} brain dimensions out of bounds", a.id)));
         }
         let mut fields = vec![];
         for f in &a.fields {
             if let Some(fi) = self.field_info(f, true) {
                 if fields.iter().any(|x: &FieldInfo| x.id == fi.id) {
-                    self.diags.push(err(
-                        "E_DUPLICATE",
-                        format!("archetype {} field {} declared twice", a.id, fi.id),
-                    ));
+                    self.diags
+                        .push(err("E_DUPLICATE", format!("archetype {} field {} declared twice", a.id, fi.id)));
                 }
                 fields.push(fi);
             }
@@ -790,16 +697,10 @@ impl<'a> Compiler<'a> {
         let mut traits = vec![];
         for t in &a.traits {
             let unit = self.parse_unit(&t.unit, &format!("trait {}", t.id));
-            if !(t.min <= t.init_min && t.init_min <= t.init_max && t.init_max <= t.max)
-                || !t.min.is_finite()
-                || !t.max.is_finite()
-            {
+            if !(t.min <= t.init_min && t.init_min <= t.init_max && t.init_max <= t.max) || !t.min.is_finite() || !t.max.is_finite() {
                 self.diags.push(err(
                     "E_TRAIT",
-                    format!(
-                        "trait {} ranges must satisfy min <= init_min <= init_max <= max",
-                        t.id
-                    ),
+                    format!("trait {} ranges must satisfy min <= init_min <= init_max <= max", t.id),
                 ));
             }
             traits.push(TraitInfo {
@@ -815,19 +716,14 @@ impl<'a> Compiler<'a> {
         let mut disposal = vec![];
         for d in &a.death_disposal {
             let Some(fi) = fields.iter().position(|f| f.id == d.field) else {
-                self.diags.push(err(
-                    "E_DISPOSAL",
-                    format!("archetype {} disposes unknown field {}", a.id, d.field),
-                ));
+                self.diags
+                    .push(err("E_DISPOSAL", format!("archetype {} disposes unknown field {}", a.id, d.field)));
                 continue;
             };
             let FieldPolicy::Reservoir { resource, .. } = fields[fi].policy else {
                 self.diags.push(err(
                     "E_DISPOSAL",
-                    format!(
-                        "archetype {} disposes non-reservoir field {}",
-                        a.id, d.field
-                    ),
+                    format!("archetype {} disposes non-reservoir field {}", a.id, d.field),
                 ));
                 continue;
             };
@@ -839,29 +735,20 @@ impl<'a> Compiler<'a> {
                     _ => {
                         self.diags.push(err(
                             "E_DISPOSAL",
-                            format!(
-                                "death disposal target {} is not a reservoir of the same resource",
-                                d.to
-                            ),
+                            format!("death disposal target {} is not a reservoir of the same resource", d.to),
                         ));
                         continue;
                     }
                 }
             } else {
                 match self.schema.account(&d.to) {
-                    Some(ac)
-                        if self.schema.accounts[ac].resource == resource
-                            && self.schema.accounts[ac].can_sink =>
-                    {
+                    Some(ac) if self.schema.accounts[ac].resource == resource && self.schema.accounts[ac].can_sink => {
                         Endpoint::External(ac)
                     }
                     _ => {
                         self.diags.push(err(
                             "E_DISPOSAL",
-                            format!(
-                                "death disposal target {} is not a sink account for this resource",
-                                d.to
-                            ),
+                            format!("death disposal target {} is not a sink account for this resource", d.to),
                         ));
                         continue;
                     }
@@ -870,24 +757,20 @@ impl<'a> Compiler<'a> {
             disposal.push((fi, ep));
         }
         for (fi, f) in fields.iter().enumerate() {
-            if matches!(f.policy, FieldPolicy::Reservoir { .. })
-                && !disposal.iter().any(|(d, _)| *d == fi)
-            {
+            if matches!(f.policy, FieldPolicy::Reservoir { .. }) && !disposal.iter().any(|(d, _)| *d == fi) {
                 self.diags.push(err(
                     "E_DISPOSAL",
-                    format!("archetype {}: conserved reservoir {} has no death disposal; deleting an entity is not a resource sink", a.id, f.id),
+                    format!(
+                        "archetype {}: conserved reservoir {} has no death disposal; deleting an entity is not a resource sink",
+                        a.id, f.id
+                    ),
                 ));
             }
         }
-        if !(0.0..=1.0).contains(&a.mutation.probability)
-            || !(0.0..=1.0).contains(&a.mutation.scale)
-        {
+        if !(0.0..=1.0).contains(&a.mutation.probability) || !(0.0..=1.0).contains(&a.mutation.scale) {
             self.diags.push(err(
                 "E_MUTATION",
-                format!(
-                    "archetype {} mutation probability/scale must be in [0,1]",
-                    a.id
-                ),
+                format!("archetype {} mutation probability/scale must be in [0,1]", a.id),
             ));
         }
         let seed_state = fields
@@ -975,13 +858,7 @@ impl<'a> Compiler<'a> {
             .map(|d| d.value)
     }
 
-    fn check_stability(
-        &mut self,
-        package: &str,
-        rule: Option<&Rule>,
-        name: &str,
-        decl: &ParamDecl,
-    ) {
+    fn check_stability(&mut self, package: &str, rule: Option<&Rule>, name: &str, decl: &ParamDecl) {
         let Some(st) = &decl.stability else { return };
         let dt = self.env.dt;
         let dx = self.env.cell_size;
@@ -992,12 +869,12 @@ impl<'a> Compiler<'a> {
                 "explicit diffusion dt*D*(2/dx^2+2/dz^2)",
             ),
             Stability::FirstOrder => (dt * decl.value, 1.0, "first-order withdrawal dt*k"),
-            Stability::Transport {
-                density_param,
-                limit,
-            } => {
+            Stability::Transport { density_param, limit } => {
                 let Some(rho) = self.lookup_param_value(package, rule, density_param) else {
-                    self.diags.push(err("E_STABILITY", format!("stability of {name} references unknown density parameter {density_param}")));
+                    self.diags.push(err(
+                        "E_STABILITY",
+                        format!("stability of {name} references unknown density parameter {density_param}"),
+                    ));
                     return;
                 };
                 let qualified = match rule {
@@ -1042,15 +919,11 @@ impl<'a> Compiler<'a> {
         for p in &pk {
             for r in &p.rules {
                 if !valid_id(&r.rule_id) || r.rule_id.contains('/') {
-                    self.diags
-                        .push(err("E_ID", format!("invalid rule id '{}'", r.rule_id)));
+                    self.diags.push(err("E_ID", format!("invalid rule id '{}'", r.rule_id)));
                     continue;
                 }
                 if !rule_ids.insert(r.rule_id.clone()) {
-                    self.diags.push(err(
-                        "E_DUPLICATE",
-                        format!("rule {} declared twice", r.rule_id),
-                    ));
+                    self.diags.push(err("E_DUPLICATE", format!("rule {} declared twice", r.rule_id)));
                     continue;
                 }
                 if !r.enabled {
@@ -1058,16 +931,10 @@ impl<'a> Compiler<'a> {
                 }
                 let (dom, arch) = match r.domain.kind.as_str() {
                     "cells" | "edges" => {
-                        let g = r
-                            .domain
-                            .grid
-                            .clone()
-                            .unwrap_or_else(|| self.env.grids[0].clone());
+                        let g = r.domain.grid.clone().unwrap_or_else(|| self.env.grids[0].clone());
                         let Some(gi) = self.env.grids.iter().position(|x| *x == g) else {
-                            self.diags.push(err(
-                                "E_GRID",
-                                format!("rule {} targets unknown grid {g}", r.rule_id),
-                            ));
+                            self.diags
+                                .push(err("E_GRID", format!("rule {} targets unknown grid {g}", r.rule_id)));
                             continue;
                         };
                         if gi != 0 {
@@ -1083,28 +950,18 @@ impl<'a> Compiler<'a> {
                         }
                     }
                     "entities" => {
-                        let Some(a) = r
-                            .domain
-                            .archetype
-                            .as_deref()
-                            .and_then(|a| self.schema.archetype(a))
-                        else {
+                        let Some(a) = r.domain.archetype.as_deref().and_then(|a| self.schema.archetype(a)) else {
                             self.diags.push(err(
                                 "E_DOMAIN",
-                                format!(
-                                    "rule {} targets unknown archetype {:?}",
-                                    r.rule_id, r.domain.archetype
-                                ),
+                                format!("rule {} targets unknown archetype {:?}", r.rule_id, r.domain.archetype),
                             ));
                             continue;
                         };
                         (Dom::Entities(a as u16), Some(a as u16))
                     }
                     k => {
-                        self.diags.push(err(
-                            "E_DOMAIN",
-                            format!("rule {} has invalid domain kind {k}", r.rule_id),
-                        ));
+                        self.diags
+                            .push(err("E_DOMAIN", format!("rule {} has invalid domain kind {k}", r.rule_id)));
                         continue;
                     }
                 };
@@ -1120,23 +977,16 @@ impl<'a> Compiler<'a> {
                 let mut seen = BTreeSet::new();
                 for n in &r.nodes {
                     if !valid_id(&n.id) || n.id.contains('/') || n.id.contains('.') {
-                        self.diags.push(
-                            err("E_ID", format!("invalid node id '{}'", n.id))
-                                .at(&r.rule_id, None, None),
-                        );
+                        self.diags
+                            .push(err("E_ID", format!("invalid node id '{}'", n.id)).at(&r.rule_id, None, None));
                         continue;
                     }
                     if !seen.insert(n.id.clone()) {
-                        self.diags.push(
-                            err("E_DUPLICATE", format!("node {} declared twice", n.id))
-                                .at(&r.rule_id, None, None),
-                        );
+                        self.diags
+                            .push(err("E_DUPLICATE", format!("node {} declared twice", n.id)).at(&r.rule_id, None, None));
                         continue;
                     }
-                    self.nodes.insert(
-                        format!("{}/{}", r.rule_id, n.id),
-                        NodeRef { rule: ri, node: n },
-                    );
+                    self.nodes.insert(format!("{}/{}", r.rule_id, n.id), NodeRef { rule: ri, node: n });
                 }
                 self.rules.push((
                     r,
@@ -1188,10 +1038,7 @@ impl<'a> Compiler<'a> {
             Some(Visit::Done) => return Ok(self.outputs[key].clone()),
             Some(Visit::Active) => {
                 let start = self.stack.iter().position(|(k, _)| k == key).unwrap_or(0);
-                let cycle: Vec<&str> = self.stack[start..]
-                    .iter()
-                    .map(|(k, _)| k.as_str())
-                    .collect();
+                let cycle: Vec<&str> = self.stack[start..].iter().map(|(k, _)| k.as_str()).collect();
                 let through_receipt = self.stack[start..].iter().any(|(_, r)| *r);
                 let (rule, node) = key.split_once('/').unwrap_or((key, ""));
                 return Err(if through_receipt {
@@ -1254,24 +1101,15 @@ impl<'a> Compiler<'a> {
             format!("{rid}/{node_part}")
         };
         if !self.nodes.contains_key(&key) {
-            return Err(err(
-                "E_UNKNOWN_NODE",
-                format!("input '{reference}' refers to unknown node {key}"),
-            )
-            .at(&rid, None, Some(port_ctx)));
+            return Err(err("E_UNKNOWN_NODE", format!("input '{reference}' refers to unknown node {key}")).at(&rid, None, Some(port_ctx)));
         }
-        let is_receipt =
-            matches!(port, "accepted" | "accepted_rate" | "fraction") || port.starts_with("leg");
+        let is_receipt = matches!(port, "accepted" | "accepted_rate" | "fraction") || port.starts_with("leg");
         if let Some(top) = self.stack.last_mut() {
             top.1 = is_receipt;
         }
         let outs = self.resolve(&key)?;
         if outs.is_empty() {
-            return Err(err(
-                "E_UPSTREAM",
-                format!("input '{reference}' depends on an invalid node"),
-            )
-            .at(&rid, None, Some(port_ctx)));
+            return Err(err("E_UPSTREAM", format!("input '{reference}' depends on an invalid node")).at(&rid, None, Some(port_ctx)));
         }
         let slot = if let Some(&ei) = self.effect_of.get(&key) {
             self.receipt_slot(ei, port, &key)?
@@ -1281,24 +1119,13 @@ impl<'a> Compiler<'a> {
             let i: usize = if n.is_empty() {
                 0
             } else {
-                n.parse()
-                    .map_err(|_| err("E_PORT", format!("unknown port {port} on {key}")))?
+                n.parse().map_err(|_| err("E_PORT", format!("unknown port {port} on {key}")))?
             };
-            *outs.get(i).ok_or_else(|| {
-                err("E_PORT", format!("node {key} has no port {port}")).at(
-                    &rid,
-                    None,
-                    Some(port_ctx),
-                )
-            })?
+            *outs
+                .get(i)
+                .ok_or_else(|| err("E_PORT", format!("node {key} has no port {port}")).at(&rid, None, Some(port_ctx)))?
         } else {
-            return Err(
-                err("E_PORT", format!("node {key} has no port '{port}'")).at(
-                    &rid,
-                    None,
-                    Some(port_ctx),
-                ),
-            );
+            return Err(err("E_PORT", format!("node {key} has no port '{port}'")).at(&rid, None, Some(port_ctx)));
         };
         Ok((slot, self.types[slot].clone()))
     }
@@ -1310,9 +1137,7 @@ impl<'a> Compiler<'a> {
             "fraction" => (0, ReceiptForm::Fraction),
             p if p.starts_with("leg") => {
                 let (n, f) = p[3..].split_once('_').unwrap_or((&p[3..], "accepted"));
-                let n: usize = n
-                    .parse()
-                    .map_err(|_| err("E_PORT", format!("bad receipt port {p}")))?;
+                let n: usize = n.parse().map_err(|_| err("E_PORT", format!("bad receipt port {p}")))?;
                 let form = match f {
                     "accepted" => ReceiptForm::Amount,
                     "accepted_rate" => ReceiptForm::Rate,
@@ -1323,9 +1148,7 @@ impl<'a> Compiler<'a> {
             p => {
                 return Err(err(
                     "E_PORT",
-                    format!(
-                        "effect {key} exposes accepted, accepted_rate, fraction, legN_accepted; not '{p}'"
-                    ),
+                    format!("effect {key} exposes accepted, accepted_rate, fraction, legN_accepted; not '{p}'"),
                 ));
             }
         };
@@ -1346,10 +1169,7 @@ impl<'a> Compiler<'a> {
                 (r.unit, Some(r.id.clone()))
             }
             _ => {
-                return Err(err(
-                    "E_PORT",
-                    format!("effect {key} is not a resource process and has no receipt"),
-                ));
+                return Err(err("E_PORT", format!("effect {key} is not a resource process and has no receipt")));
             }
         };
         let (unit, quantity) = match form {
@@ -1365,49 +1185,26 @@ impl<'a> Compiler<'a> {
             dom,
             stage: Stage::Receipt,
         };
-        Ok(self.emit(
-            Op::Receipt {
-                effect: ei,
-                leg,
-                form,
-            },
-            vec![],
-            t,
-            &format!("{key}.{port}"),
-        ))
+        Ok(self.emit(Op::Receipt { effect: ei, leg, form }, vec![], t, &format!("{key}.{port}")))
     }
 
-    fn input_list(
-        &mut self,
-        rule_idx: usize,
-        node: &Node,
-        n: Option<usize>,
-    ) -> R<Vec<(Slot, Type)>> {
+    fn input_list(&mut self, rule_idx: usize, node: &Node, n: Option<usize>) -> R<Vec<(Slot, Type)>> {
         let list = match node.args.get("inputs") {
             Some(Value::Array(a)) => a.clone(),
             None if n == Some(0) => vec![],
             _ => {
-                return Err(err(
-                    "E_ARGS",
-                    format!("op {} requires an 'inputs' array", node.op),
-                ));
+                return Err(err("E_ARGS", format!("op {} requires an 'inputs' array", node.op)));
             }
         };
         if let Some(n) = n
             && list.len() != n
         {
-            return Err(err(
-                "E_ARITY",
-                format!("op {} takes {n} inputs, got {}", node.op, list.len()),
-            ));
+            return Err(err("E_ARITY", format!("op {} takes {n} inputs, got {}", node.op, list.len())));
         }
         let mut out = vec![];
         for (i, v) in list.iter().enumerate() {
             let Value::String(s) = v else {
-                return Err(err(
-                    "E_ARGS",
-                    format!("input {i} must be a node reference string"),
-                ));
+                return Err(err("E_ARGS", format!("input {i} must be a node reference string")));
             };
             out.push(self.input(rule_idx, s, &format!("inputs[{i}]"))?);
         }
@@ -1417,10 +1214,7 @@ impl<'a> Compiler<'a> {
     fn named_input(&mut self, rule_idx: usize, node: &Node, key: &str) -> R<(Slot, Type)> {
         match node.args.get(key) {
             Some(Value::String(s)) => self.input(rule_idx, s, key),
-            _ => Err(err(
-                "E_ARGS",
-                format!("op {} requires input '{key}'", node.op),
-            )),
+            _ => Err(err("E_ARGS", format!("op {} requires input '{key}'", node.op))),
         }
     }
 
@@ -1487,60 +1281,40 @@ impl<'a> Compiler<'a> {
                 let v = arg_f64(node, "value")?;
                 let unit = self.unit_arg(node, "unit")?;
                 let q = arg_opt_str(node, "quantity");
-                self.emit(
-                    Op::Const(v),
-                    vec![],
-                    n_type(unit, q, Dom::Uniform, Stage::Snapshot),
-                    key,
-                )
+                self.emit(Op::Const(v), vec![], n_type(unit, q, Dom::Uniform, Stage::Snapshot), key)
             }
             "parameter" => {
                 let name = arg_str(node, "name")?;
                 let rc = &self.rules[ri].1;
-                let idx = rc.params.get(&name).copied().or_else(|| {
-                    self.package_params
-                        .get(&rc.package)
-                        .and_then(|m| m.get(&name).copied())
-                });
+                let idx = rc
+                    .params
+                    .get(&name)
+                    .copied()
+                    .or_else(|| self.package_params.get(&rc.package).and_then(|m| m.get(&name).copied()));
                 let Some(idx) = idx else {
                     return Err(err("E_UNKNOWN_PARAM", format!("unknown parameter {name}")));
                 };
                 let decl_unit = Unit::parse(&self.params[idx].unit).unwrap_or(DIMENSIONLESS);
                 let q = self.param_quantity(ri, &name);
-                self.emit(
-                    Op::Param(idx),
-                    vec![],
-                    n_type(decl_unit, q, Dom::Uniform, Stage::Snapshot),
-                    key,
-                )
+                self.emit(Op::Param(idx), vec![], n_type(decl_unit, q, Dom::Uniform, Stage::Snapshot), key)
             }
             "read_state" | "candidate_state" => {
                 let field = arg_str(node, "field")?;
                 let candidate = op == "candidate_state";
                 if let Some(ef) = field.strip_prefix("self.") {
                     let Some(a) = arch else {
-                        return Err(err(
-                            "E_DOMAIN",
-                            "self.<field> is only valid in an entities rule",
-                        ));
+                        return Err(err("E_DOMAIN", "self.<field> is only valid in an entities rule"));
                     };
                     let ai = &self.schema.archetypes[a as usize];
                     let Some(fi) = ai.field(ef) else {
-                        return Err(err(
-                            "E_UNKNOWN_FIELD",
-                            format!("archetype {} has no field {ef}", ai.id),
-                        ));
+                        return Err(err("E_UNKNOWN_FIELD", format!("archetype {} has no field {ef}", ai.id)));
                     };
                     let f = &ai.fields[fi];
                     let t = n_type(
                         f.unit,
                         f.quantity.clone(),
                         Dom::Entities(a),
-                        if candidate {
-                            Stage::Candidate
-                        } else {
-                            Stage::Snapshot
-                        },
+                        if candidate { Stage::Candidate } else { Stage::Snapshot },
                     );
                     let o = if candidate {
                         Op::CandidateEntity(a, fi)
@@ -1557,18 +1331,10 @@ impl<'a> Compiler<'a> {
                     }
                     let fname = field.strip_prefix("cell.").unwrap_or(&field);
                     let Some(fi) = self.schema.cell_field(fname) else {
-                        return Err(err(
-                            "E_UNKNOWN_FIELD",
-                            format!("unknown cell field {fname}"),
-                        ));
+                        return Err(err("E_UNKNOWN_FIELD", format!("unknown cell field {fname}")));
                     };
                     let f = &self.schema.cell_fields[fi];
-                    let t = n_type(
-                        f.unit,
-                        f.quantity.clone(),
-                        Dom::Cells(f.grid),
-                        Stage::Snapshot,
-                    );
+                    let t = n_type(f.unit, f.quantity.clone(), Dom::Cells(f.grid), Stage::Snapshot);
                     self.emit(Op::ReadCell(fi), vec![], t, key)
                 }
             }
@@ -1579,18 +1345,10 @@ impl<'a> Compiler<'a> {
                 let name = arg_str(node, "name")?;
                 let ai = &self.schema.archetypes[a as usize];
                 let Some(ti) = ai.traits.iter().position(|t| t.id == name) else {
-                    return Err(err(
-                        "E_UNKNOWN_TRAIT",
-                        format!("archetype {} has no trait {name}", ai.id),
-                    ));
+                    return Err(err("E_UNKNOWN_TRAIT", format!("archetype {} has no trait {name}", ai.id)));
                 };
                 let unit = ai.traits[ti].unit;
-                self.emit(
-                    Op::Trait(a, ti),
-                    vec![],
-                    n_type(unit, None, Dom::Entities(a), Stage::Snapshot),
-                    key,
-                )
+                self.emit(Op::Trait(a, ti), vec![], n_type(unit, None, Dom::Entities(a), Stage::Snapshot), key)
             }
             "builtin" => {
                 let Some(a) = arch else {
@@ -1635,12 +1393,7 @@ impl<'a> Compiler<'a> {
                 let Some(r) = self.schema.region(&name) else {
                     return Err(err("E_UNKNOWN_REGION", format!("unknown region {name}")));
                 };
-                self.emit(
-                    Op::Region(r),
-                    vec![],
-                    n_type(DIMENSIONLESS, None, cells, Stage::Snapshot),
-                    key,
-                )
+                self.emit(Op::Region(r), vec![], n_type(DIMENSIONLESS, None, cells, Stage::Snapshot), key)
             }
             "cell_area" => self.emit(
                 Op::CellArea,
@@ -1660,12 +1413,7 @@ impl<'a> Compiler<'a> {
                 let (a, b) = (&ins[0].1, &ins[1].1);
                 self.num(a, "operand")?;
                 self.num(b, "operand")?;
-                let unit = if op == "add" {
-                    a.unit.add(&b.unit)
-                } else {
-                    a.unit.sub(&b.unit)
-                }
-                .map_err(|e| {
+                let unit = if op == "add" { a.unit.add(&b.unit) } else { a.unit.sub(&b.unit) }.map_err(|e| {
                     err(
                         "E_UNIT",
                         format!(
@@ -1675,11 +1423,7 @@ impl<'a> Compiler<'a> {
                         ),
                     )
                 })?;
-                let q = Self::join_quantity(
-                    &a.quantity,
-                    &b.quantity,
-                    if op == "add" { "add" } else { "subtract" },
-                )?;
+                let q = Self::join_quantity(&a.quantity, &b.quantity, if op == "add" { "add" } else { "subtract" })?;
                 let dom = self.unify_dom(a.dom, b.dom)?;
                 let st = a.stage.max(b.stage);
                 let o = if op == "add" { Op::Add } else { Op::Sub };
@@ -1697,12 +1441,7 @@ impl<'a> Compiler<'a> {
                     mul_quantity(&a.quantity, &b.quantity)
                 };
                 let dom = self.unify_dom(a.dom, b.dom)?;
-                self.emit(
-                    Op::Mul,
-                    vec![ins[0].0, ins[1].0],
-                    n_type(unit, q, dom, a.stage.max(b.stage)),
-                    key,
-                )
+                self.emit(Op::Mul, vec![ins[0].0, ins[1].0], n_type(unit, q, dom, a.stage.max(b.stage)), key)
             }
             "safe_divide" => {
                 let ins = self.input_list(ri, node, Some(3))?;
@@ -1714,10 +1453,7 @@ impl<'a> Compiler<'a> {
                 if f.unit != unit {
                     return Err(err(
                         "E_UNIT",
-                        format!(
-                            "safe_divide fallback must have the result unit {unit}, got {}",
-                            f.unit
-                        ),
+                        format!("safe_divide fallback must have the result unit {unit}, got {}", f.unit),
                     ));
                 }
                 let q = if unit.is_dimensionless() {
@@ -1727,22 +1463,14 @@ impl<'a> Compiler<'a> {
                 };
                 let dom = self.unify_dom(self.unify_dom(a.dom, b.dom)?, f.dom)?;
                 let st = a.stage.max(b.stage).max(f.stage);
-                self.emit(
-                    Op::SafeDiv,
-                    vec![ins[0].0, ins[1].0, ins[2].0],
-                    n_type(unit, q, dom, st),
-                    key,
-                )
+                self.emit(Op::SafeDiv, vec![ins[0].0, ins[1].0, ins[2].0], n_type(unit, q, dom, st), key)
             }
             "neg" | "abs" => {
                 let ins = self.input_list(ri, node, Some(1))?;
                 let a = &ins[0].1;
                 self.num(a, "operand")?;
                 if a.unit.absolute {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("{op} of an absolute temperature is meaningless"),
-                    ));
+                    return Err(err("E_UNIT", format!("{op} of an absolute temperature is meaningless")));
                 }
                 let o = if op == "neg" { Op::Neg } else { Op::Abs };
                 self.emit(o, vec![ins[0].0], a.clone(), key)
@@ -1753,20 +1481,12 @@ impl<'a> Compiler<'a> {
                 self.num(a, "operand")?;
                 self.num(b, "operand")?;
                 if !a.unit.same(&b.unit) {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("{op} requires equal units, got {} and {}", a.unit, b.unit),
-                    ));
+                    return Err(err("E_UNIT", format!("{op} requires equal units, got {} and {}", a.unit, b.unit)));
                 }
                 let q = Self::join_quantity(&a.quantity, &b.quantity, op)?;
                 let dom = self.unify_dom(a.dom, b.dom)?;
                 let o = if op == "min" { Op::Min } else { Op::Max };
-                self.emit(
-                    o,
-                    vec![ins[0].0, ins[1].0],
-                    n_type(a.unit, q, dom, a.stage.max(b.stage)),
-                    key,
-                )
+                self.emit(o, vec![ins[0].0, ins[1].0], n_type(a.unit, q, dom, a.stage.max(b.stage)), key)
             }
             "clamp" => {
                 let ins = self.input_list(ri, node, Some(3))?;
@@ -1777,10 +1497,7 @@ impl<'a> Compiler<'a> {
                 if !(x.unit.same(&lo.unit) && x.unit.same(&hi.unit)) {
                     return Err(err(
                         "E_UNIT",
-                        format!(
-                            "clamp requires equal units, got {}, {}, {}",
-                            x.unit, lo.unit, hi.unit
-                        ),
+                        format!("clamp requires equal units, got {}, {}, {}", x.unit, lo.unit, hi.unit),
                     ));
                 }
                 let dom = self.unify_dom(self.unify_dom(x.dom, lo.dom)?, hi.dom)?;
@@ -1800,10 +1517,7 @@ impl<'a> Compiler<'a> {
                 if !a.unit.same(&b.unit) {
                     return Err(err(
                         "E_UNIT",
-                        format!(
-                            "comparison requires equal units, got {} and {}",
-                            a.unit, b.unit
-                        ),
+                        format!("comparison requires equal units, got {} and {}", a.unit, b.unit),
                     ));
                 }
                 Self::join_quantity(&a.quantity, &b.quantity, "compare")?;
@@ -1814,12 +1528,7 @@ impl<'a> Compiler<'a> {
                     "gt" => Op::Gt,
                     _ => Op::Ge,
                 };
-                self.emit(
-                    o,
-                    vec![ins[0].0, ins[1].0],
-                    b_type(dom, a.stage.max(b.stage)),
-                    key,
-                )
+                self.emit(o, vec![ins[0].0, ins[1].0], b_type(dom, a.stage.max(b.stage)), key)
             }
             "and" | "or" => {
                 let ins = self.input_list(ri, node, Some(2))?;
@@ -1829,12 +1538,7 @@ impl<'a> Compiler<'a> {
                 }
                 let dom = self.unify_dom(a.dom, b.dom)?;
                 let o = if op == "and" { Op::And } else { Op::Or };
-                self.emit(
-                    o,
-                    vec![ins[0].0, ins[1].0],
-                    b_type(dom, a.stage.max(b.stage)),
-                    key,
-                )
+                self.emit(o, vec![ins[0].0, ins[1].0], b_type(dom, a.stage.max(b.stage)), key)
             }
             "not" => {
                 let ins = self.input_list(ri, node, Some(1))?;
@@ -1853,10 +1557,7 @@ impl<'a> Compiler<'a> {
                 if a.kind != b.kind || !a.unit.same(&b.unit) {
                     return Err(err(
                         "E_UNIT",
-                        format!(
-                            "select branches must have equal types, got {} and {}",
-                            a.unit, b.unit
-                        ),
+                        format!("select branches must have equal types, got {} and {}", a.unit, b.unit),
                     ));
                 }
                 let q = Self::join_quantity(&a.quantity, &b.quantity, "select between")?;
@@ -1878,30 +1579,19 @@ impl<'a> Compiler<'a> {
                     self.num(x, "operand")?;
                 }
                 if !a.unit.same(&b.unit) || !t.unit.is_dimensionless() {
-                    return Err(err(
-                        "E_UNIT",
-                        "lerp requires equal endpoint units and a dimensionless t",
-                    ));
+                    return Err(err("E_UNIT", "lerp requires equal endpoint units and a dimensionless t"));
                 }
                 let q = Self::join_quantity(&a.quantity, &b.quantity, "interpolate")?;
                 let dom = self.unify_dom(self.unify_dom(a.dom, b.dom)?, t.dom)?;
                 let st = a.stage.max(b.stage).max(t.stage);
-                self.emit(
-                    Op::Lerp,
-                    vec![ins[0].0, ins[1].0, ins[2].0],
-                    n_type(a.unit, q, dom, st),
-                    key,
-                )
+                self.emit(Op::Lerp, vec![ins[0].0, ins[1].0, ins[2].0], n_type(a.unit, q, dom, st), key)
             }
             "exp" | "ln" | "sin" | "cos" | "tanh" => {
                 let ins = self.input_list(ri, node, Some(1))?;
                 let a = &ins[0].1;
                 self.num(a, "operand")?;
                 if !a.unit.is_dimensionless() {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("{op} requires a dimensionless argument, got {}", a.unit),
-                    ));
+                    return Err(err("E_UNIT", format!("{op} requires a dimensionless argument, got {}", a.unit)));
                 }
                 let o = match op {
                     "exp" => Op::Exp,
@@ -1910,21 +1600,13 @@ impl<'a> Compiler<'a> {
                     "cos" => Op::Cos,
                     _ => Op::Tanh,
                 };
-                self.emit(
-                    o,
-                    vec![ins[0].0],
-                    n_type(DIMENSIONLESS, None, a.dom, a.stage),
-                    key,
-                )
+                self.emit(o, vec![ins[0].0], n_type(DIMENSIONLESS, None, a.dom, a.stage), key)
             }
             "pow" => {
                 let ins = self.input_list(ri, node, Some(2))?;
                 let (a, b) = (&ins[0].1, &ins[1].1);
                 if !a.unit.is_dimensionless() || !b.unit.is_dimensionless() {
-                    return Err(err(
-                        "E_UNIT",
-                        "pow requires dimensionless base and exponent",
-                    ));
+                    return Err(err("E_UNIT", "pow requires dimensionless base and exponent"));
                 }
                 let dom = self.unify_dom(a.dom, b.dom)?;
                 self.emit(
@@ -1943,10 +1625,7 @@ impl<'a> Compiler<'a> {
                 if a.unit != in_unit {
                     return Err(err(
                         "E_UNIT",
-                        format!(
-                            "curve declares input unit {in_unit} but receives {}",
-                            a.unit
-                        ),
+                        format!("curve declares input unit {in_unit} but receives {}", a.unit),
                     ));
                 }
                 let pts = match node.args.get("points") {
@@ -1954,10 +1633,7 @@ impl<'a> Compiler<'a> {
                     _ => return Err(err("E_ARGS", "curve requires 'points': [[x, y], ...]")),
                 };
                 if pts.len() < 2 || pts.len() > MAX_CURVE_POINTS {
-                    return Err(err(
-                        "E_ARGS",
-                        format!("curve needs 2..={MAX_CURVE_POINTS} points"),
-                    ));
+                    return Err(err("E_ARGS", format!("curve needs 2..={MAX_CURVE_POINTS} points")));
                 }
                 let mut v = vec![];
                 for p in pts {
@@ -1976,12 +1652,7 @@ impl<'a> Compiler<'a> {
                     v.push((x, y));
                 }
                 let q = arg_opt_str(node, "quantity");
-                self.emit(
-                    Op::Curve(v),
-                    vec![ins[0].0],
-                    n_type(out_unit, q, a.dom, a.stage),
-                    key,
-                )
+                self.emit(Op::Curve(v), vec![ins[0].0], n_type(out_unit, q, a.dom, a.stage), key)
             }
             "as_quantity" => {
                 let ins = self.input_list(ri, node, Some(1))?;
@@ -1998,10 +1669,7 @@ impl<'a> Compiler<'a> {
                 }
                 let m = Unit::new(0, 1, 0, 0);
                 let (o, unit) = match op {
-                    "laplacian" => (
-                        Op::Laplacian,
-                        a.unit.interval().div(&m.powi(2).unwrap()).unwrap(),
-                    ),
+                    "laplacian" => (Op::Laplacian, a.unit.interval().div(&m.powi(2).unwrap()).unwrap()),
                     "gradient_x" => (Op::GradX, a.unit.interval().div(&m).unwrap()),
                     "gradient_z" => (Op::GradZ, a.unit.interval().div(&m).unwrap()),
                     _ => {
@@ -2009,10 +1677,7 @@ impl<'a> Compiler<'a> {
                         if r == 0 || r > self.env.budgets.max_radius {
                             return Err(err(
                                 "E_BUDGET_RADIUS",
-                                format!(
-                                    "neighborhood radius {r} must be in 1..={}",
-                                    self.env.budgets.max_radius
-                                ),
+                                format!("neighborhood radius {r} must be in 1..={}", self.env.budgets.max_radius),
                             ));
                         }
                         if op == "neighbor_sum" {
@@ -2046,24 +1711,12 @@ impl<'a> Compiler<'a> {
                 if op == "region_sum" && a.unit.absolute {
                     return Err(err("E_UNIT", "cannot sum absolute temperatures"));
                 }
-                let o = if op == "region_mean" {
-                    Op::RegionMean(r)
-                } else {
-                    Op::RegionSum(r)
-                };
-                self.emit(
-                    o,
-                    vec![ins[0].0],
-                    n_type(a.unit, a.quantity.clone(), Dom::Uniform, a.stage),
-                    key,
-                )
+                let o = if op == "region_mean" { Op::RegionMean(r) } else { Op::RegionSum(r) };
+                self.emit(o, vec![ins[0].0], n_type(a.unit, a.quantity.clone(), Dom::Uniform, a.stage), key)
             }
             "edge_from" | "edge_to" => {
                 if !matches!(rule_dom, Dom::Edges(_)) {
-                    return Err(err(
-                        "E_DOMAIN",
-                        format!("{op} is only valid in an edges rule"),
-                    ));
+                    return Err(err("E_DOMAIN", format!("{op} is only valid in an edges rule")));
                 }
                 let ins = self.input_list(ri, node, Some(1))?;
                 let a = &ins[0].1;
@@ -2072,27 +1725,17 @@ impl<'a> Compiler<'a> {
                 };
                 let mut t = a.clone();
                 t.dom = Dom::Edges(g);
-                let o = if op == "edge_from" {
-                    Op::EdgeFrom
-                } else {
-                    Op::EdgeTo
-                };
+                let o = if op == "edge_from" { Op::EdgeFrom } else { Op::EdgeTo };
                 self.emit(o, vec![ins[0].0], t, key)
             }
             "sample" | "sample_offset" => {
                 let Some(a) = arch else {
-                    return Err(err(
-                        "E_DOMAIN",
-                        format!("{op} is only valid in an entities rule"),
-                    ));
+                    return Err(err("E_DOMAIN", format!("{op} is only valid in an entities rule")));
                 };
                 let ins = self.input_list(ri, node, Some(1))?;
                 let x = &ins[0].1;
                 if !matches!(x.dom, Dom::Cells(0)) {
-                    return Err(err(
-                        "E_DOMAIN",
-                        format!("{op} requires a cells input on the surface grid"),
-                    ));
+                    return Err(err("E_DOMAIN", format!("{op} requires a cells input on the surface grid")));
                 }
                 let mut t = x.clone();
                 t.dom = Dom::Entities(a);
@@ -2101,8 +1744,7 @@ impl<'a> Compiler<'a> {
                 } else {
                     let forward = arg_f64(node, "forward")?;
                     let lateral = arg_f64(node, "lateral").unwrap_or(0.0);
-                    let reach =
-                        (forward.abs().max(lateral.abs()) / self.env.cell_size).ceil() as usize;
+                    let reach = (forward.abs().max(lateral.abs()) / self.env.cell_size).ceil() as usize;
                     if reach > self.env.budgets.max_radius {
                         return Err(err(
                             "E_BUDGET_RADIUS",
@@ -2118,19 +1760,13 @@ impl<'a> Compiler<'a> {
             }
             "crowding" => {
                 let Some(a) = arch else {
-                    return Err(err(
-                        "E_DOMAIN",
-                        "crowding is only valid in an entities rule",
-                    ));
+                    return Err(err("E_DOMAIN", "crowding is only valid in an entities rule"));
                 };
                 let r = arg_f64(node, "radius")? as usize;
                 if r > self.env.budgets.max_radius {
                     return Err(err(
                         "E_BUDGET_RADIUS",
-                        format!(
-                            "crowding radius {r} exceeds limit {}",
-                            self.env.budgets.max_radius
-                        ),
+                        format!("crowding radius {r} exceeds limit {}", self.env.budgets.max_radius),
                     ));
                 }
                 self.emit(
@@ -2159,18 +1795,12 @@ impl<'a> Compiler<'a> {
                     if t.kind != Kind::Number || !t.unit.is_dimensionless() {
                         return Err(err(
                             "E_UNIT",
-                            format!(
-                                "brain input {i} must be a dimensionless normalized number, got {}",
-                                t.unit
-                            ),
+                            format!("brain input {i} must be a dimensionless normalized number, got {}", t.unit),
                         ));
                     }
                     self.unify_dom(t.dom, Dom::Entities(a))?;
                     if t.stage != Stage::Snapshot {
-                        return Err(err(
-                            "E_STAGE",
-                            format!("brain input {i} must be a snapshot observation"),
-                        ));
+                        return Err(err("E_STAGE", format!("brain input {i} must be a snapshot observation")));
                     }
                 }
                 if self.instrs.iter().any(|x| x.op == Op::Brain(a)) {
@@ -2224,32 +1854,21 @@ impl<'a> Compiler<'a> {
             let Some(a) = self.schema.account(s) else {
                 return Err(err(
                     "E_UNDECLARED_EXTERNAL",
-                    format!(
-                        "undeclared external account {s}; external creation or removal must be declared"
-                    ),
+                    format!("undeclared external account {s}; external creation or removal must be declared"),
                 ));
             };
             let acc = &self.schema.accounts[a];
             if acc.resource != resource {
                 return Err(err(
                     "E_QUANTITY",
-                    format!(
-                        "account {s} exchanges {}, not {res_id}",
-                        self.schema.resources[acc.resource].id
-                    ),
+                    format!("account {s} exchanges {}, not {res_id}", self.schema.resources[acc.resource].id),
                 ));
             }
             if as_source && !acc.can_source {
-                return Err(err(
-                    "E_UNDECLARED_EXTERNAL",
-                    format!("account {s} is not declared as a source"),
-                ));
+                return Err(err("E_UNDECLARED_EXTERNAL", format!("account {s} is not declared as a source")));
             }
             if !as_source && !acc.can_sink {
-                return Err(err(
-                    "E_UNDECLARED_EXTERNAL",
-                    format!("account {s} is not declared as a sink"),
-                ));
+                return Err(err("E_UNDECLARED_EXTERNAL", format!("account {s} is not declared as a sink")));
             }
             return Ok(Endpoint::External(a));
         }
@@ -2261,23 +1880,16 @@ impl<'a> Compiler<'a> {
                 FieldPolicy::Reservoir { resource: r, .. } if r == resource => Ok(fi),
                 FieldPolicy::Reservoir { resource: r, .. } => Err(err(
                     "E_QUANTITY",
-                    format!(
-                        "field {name} holds {}, not {res_id}",
-                        self.schema.resources[r].id
-                    ),
+                    format!("field {name} holds {}, not {res_id}", self.schema.resources[r].id),
                 )),
                 _ => Err(err(
                     "E_WRITER",
-                    format!(
-                        "field {name} is not a conserved reservoir; transfers only move reservoir contents"
-                    ),
+                    format!("field {name} is not a conserved reservoir; transfers only move reservoir contents"),
                 )),
             }
         };
         match dom {
-            Dom::Cells(_) => Ok(Endpoint::Cell(check_cell(
-                s.strip_prefix("cell.").unwrap_or(s),
-            )?)),
+            Dom::Cells(_) => Ok(Endpoint::Cell(check_cell(s.strip_prefix("cell.").unwrap_or(s))?)),
             Dom::Edges(_) => {
                 if let Some(f) = s.strip_suffix("@from") {
                     Ok(Endpoint::EdgeA(check_cell(f)?))
@@ -2294,28 +1906,18 @@ impl<'a> Compiler<'a> {
                 if let Some(f) = s.strip_prefix("self.") {
                     let ai = &self.schema.archetypes[a as usize];
                     let Some(fi) = ai.field(f) else {
-                        return Err(err(
-                            "E_UNKNOWN_FIELD",
-                            format!("archetype {} has no field {f}", ai.id),
-                        ));
+                        return Err(err("E_UNKNOWN_FIELD", format!("archetype {} has no field {f}", ai.id)));
                     };
                     match ai.fields[fi].policy {
-                        FieldPolicy::Reservoir { resource: r, .. } if r == resource => {
-                            Ok(Endpoint::Entity(a, fi))
-                        }
-                        _ => Err(err(
-                            "E_QUANTITY",
-                            format!("self.{f} is not a {res_id} reservoir"),
-                        )),
+                        FieldPolicy::Reservoir { resource: r, .. } if r == resource => Ok(Endpoint::Entity(a, fi)),
+                        _ => Err(err("E_QUANTITY", format!("self.{f} is not a {res_id} reservoir"))),
                     }
                 } else if let Some(f) = s.strip_prefix("cell.") {
                     Ok(Endpoint::Cell(check_cell(f)?))
                 } else {
                     Err(err(
                         "E_ENDPOINT",
-                        format!(
-                            "entity endpoints must be self.<field>, cell.<field>, or external.<account>; got {s}"
-                        ),
+                        format!("entity endpoints must be self.<field>, cell.<field>, or external.<account>; got {s}"),
                     ))
                 }
             }
@@ -2323,22 +1925,12 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn amount(
-        &mut self,
-        ri: usize,
-        node: &Node,
-        obj: &serde_json::Map<String, Value>,
-        resource: usize,
-        ctx: &str,
-    ) -> R<(Slot, bool)> {
+    fn amount(&mut self, ri: usize, node: &Node, obj: &serde_json::Map<String, Value>, resource: usize, ctx: &str) -> R<(Slot, bool)> {
         let (reference, is_rate) = match (obj.get("rate"), obj.get("amount")) {
             (Some(Value::String(s)), None) => (s.clone(), true),
             (None, Some(Value::String(s))) => (s.clone(), false),
             _ => {
-                return Err(err(
-                    "E_ARGS",
-                    format!("{ctx} requires exactly one of 'rate' or 'amount'"),
-                ));
+                return Err(err("E_ARGS", format!("{ctx} requires exactly one of 'rate' or 'amount'")));
             }
         };
         let port = if is_rate { "rate" } else { "amount" };
@@ -2367,7 +1959,10 @@ impl<'a> Compiler<'a> {
         {
             return Err(err(
                 "E_QUANTITY",
-                format!("{ctx} moves {} but its {port} is a {q} quantity; a {q} amount cannot silently become {}", r.id, r.id),
+                format!(
+                    "{ctx} moves {} but its {port} is a {q} quantity; a {q} amount cannot silently become {}",
+                    r.id, r.id
+                ),
             )
             .at(&rid, Some(&node.id), Some(port)));
         }
@@ -2385,22 +1980,14 @@ impl<'a> Compiler<'a> {
         {
             return Err(err(
                 "E_NEGATIVE_REQUEST",
-                format!(
-                    "{ctx} requests a negative amount ({v}); resource requests must be nonnegative"
-                ),
+                format!("{ctx} requests a negative amount ({v}); resource requests must be nonnegative"),
             )
             .at(&rid, Some(&node.id), Some(port)));
         }
         Ok((slot, is_rate))
     }
 
-    fn leg(
-        &mut self,
-        ri: usize,
-        node: &Node,
-        obj: &serde_json::Map<String, Value>,
-        ctx: &str,
-    ) -> R<Leg> {
+    fn leg(&mut self, ri: usize, node: &Node, obj: &serde_json::Map<String, Value>, ctx: &str) -> R<Leg> {
         let res_name = obj
             .get("resource")
             .and_then(|v| v.as_str())
@@ -2420,10 +2007,7 @@ impl<'a> Compiler<'a> {
         let from = self.endpoint(ri, from, resource, true)?;
         let to = self.endpoint(ri, to, resource, false)?;
         if from.is_external() && to.is_external() {
-            return Err(err(
-                "E_ENDPOINT",
-                format!("{ctx} moves between two external accounts"),
-            ));
+            return Err(err("E_ENDPOINT", format!("{ctx} moves between two external accounts")));
         }
         let (amount, is_rate) = self.amount(ri, node, obj, resource, ctx)?;
         Ok(Leg {
@@ -2435,27 +2019,16 @@ impl<'a> Compiler<'a> {
         })
     }
 
-    fn state_target(
-        &self,
-        ri: usize,
-        field: &str,
-        want: FieldPolicy,
-    ) -> R<(Option<u16>, usize, Unit)> {
+    fn state_target(&self, ri: usize, field: &str, want: FieldPolicy) -> R<(Option<u16>, usize, Unit)> {
         let rc = &self.rules[ri].1;
         if let Some(f) = field.strip_prefix("self.") {
             let Some(a) = rc.arch else {
-                return Err(err(
-                    "E_DOMAIN",
-                    "self.<field> is only valid in an entities rule",
-                ));
+                return Err(err("E_DOMAIN", "self.<field> is only valid in an entities rule"));
             };
             let ai = &self.schema.archetypes[a as usize];
-            let fi = ai.field(f).ok_or_else(|| {
-                err(
-                    "E_UNKNOWN_FIELD",
-                    format!("archetype {} has no field {f}", ai.id),
-                )
-            })?;
+            let fi = ai
+                .field(f)
+                .ok_or_else(|| err("E_UNKNOWN_FIELD", format!("archetype {} has no field {f}", ai.id)))?;
             if ai.fields[fi].policy != want {
                 return Err(err(
                     "E_WRITER",
@@ -2468,10 +2041,7 @@ impl<'a> Compiler<'a> {
             Ok((Some(a), fi, ai.fields[fi].unit))
         } else {
             if !matches!(rc.dom, Dom::Cells(_)) {
-                return Err(err(
-                    "E_DOMAIN",
-                    "cell state effects must come from a cells rule",
-                ));
+                return Err(err("E_DOMAIN", "cell state effects must come from a cells rule"));
             }
             let fi = self
                 .schema
@@ -2524,10 +2094,7 @@ impl<'a> Compiler<'a> {
                     leg.to.is_external()
                 };
                 if !ext_ok {
-                    return Err(err(
-                        "E_UNDECLARED_EXTERNAL",
-                        format!("{op} account must be an external account"),
-                    ));
+                    return Err(err("E_UNDECLARED_EXTERNAL", format!("{op} account must be an external account")));
                 }
                 EffectKind::Process { legs: vec![leg] }
             }
@@ -2547,10 +2114,7 @@ impl<'a> Compiler<'a> {
             }
             "edge_transfer" => {
                 if !matches!(rc_dom, Dom::Edges(_)) {
-                    return Err(err(
-                        "E_DOMAIN",
-                        "edge_transfer is only valid in an edges rule",
-                    ));
+                    return Err(err("E_DOMAIN", "edge_transfer is only valid in an edges rule"));
                 }
                 let res = arg_str(node, "resource")?;
                 let resource = self
@@ -2566,11 +2130,7 @@ impl<'a> Compiler<'a> {
                 if !is_rate {
                     return Err(err("E_ARGS", "edge_transfer takes a signed 'rate'"));
                 }
-                EffectKind::EdgeTransfer {
-                    resource,
-                    field: fi,
-                    rate,
-                }
+                EffectKind::EdgeTransfer { resource, field: fi, rate }
             }
             "rate_contribution" => {
                 let field = arg_str(node, "field")?;
@@ -2578,25 +2138,18 @@ impl<'a> Compiler<'a> {
                 let (rate, t) = self.named_input(ri, node, "rate")?;
                 let expect = unit.interval().div(&Unit::new(0, 0, 1, 0)).unwrap();
                 if t.unit != expect || t.kind != Kind::Number {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("rate for {field} must be {expect}, got {}", t.unit),
-                    )
-                    .at(&rule_id, Some(&node.id), Some("rate")));
+                    return Err(err("E_UNIT", format!("rate for {field} must be {expect}, got {}", t.unit)).at(
+                        &rule_id,
+                        Some(&node.id),
+                        Some("rate"),
+                    ));
                 }
                 if t.stage > Stage::Receipt {
-                    return Err(err(
-                        "E_STAGE",
-                        "rate contributions cannot read candidate state",
-                    ));
+                    return Err(err("E_STAGE", "rate contributions cannot read candidate state"));
                 }
                 check_dom(self, &t)?;
                 match arch {
-                    Some(a) => EffectKind::RateEntity {
-                        arch: a,
-                        field: fi,
-                        rate,
-                    },
+                    Some(a) => EffectKind::RateEntity { arch: a, field: fi, rate },
                     None => EffectKind::RateCell { field: fi, rate },
                 }
             }
@@ -2605,21 +2158,14 @@ impl<'a> Compiler<'a> {
                 let (arch, fi, unit) = self.state_target(ri, &field, FieldPolicy::NextValue)?;
                 let (value, t) = self.named_input(ri, node, "value")?;
                 if t.unit != unit {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("next value for {field} must be {unit}, got {}", t.unit),
-                    ));
+                    return Err(err("E_UNIT", format!("next value for {field} must be {unit}, got {}", t.unit)));
                 }
                 if t.stage > Stage::Receipt {
                     return Err(err("E_STAGE", "next values cannot read candidate state"));
                 }
                 check_dom(self, &t)?;
                 match arch {
-                    Some(a) => EffectKind::NextEntity {
-                        arch: a,
-                        field: fi,
-                        value,
-                    },
+                    Some(a) => EffectKind::NextEntity { arch: a, field: fi, value },
                     None => EffectKind::NextCell { field: fi, value },
                 }
             }
@@ -2630,16 +2176,10 @@ impl<'a> Compiler<'a> {
                 let (turn, tt) = self.named_input(ri, node, "turn")?;
                 let (speed, st) = self.named_input(ri, node, "speed")?;
                 if tt.unit != Unit::new(0, 0, -1, 0) {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("move turn must be rad/s (1/s), got {}", tt.unit),
-                    ));
+                    return Err(err("E_UNIT", format!("move turn must be rad/s (1/s), got {}", tt.unit)));
                 }
                 if st.unit != Unit::new(0, 1, -1, 0) {
-                    return Err(err(
-                        "E_UNIT",
-                        format!("move speed must be m/s, got {}", st.unit),
-                    ));
+                    return Err(err("E_UNIT", format!("move speed must be m/s, got {}", st.unit)));
                 }
                 if tt.stage > Stage::Receipt || st.stage > Stage::Receipt {
                     return Err(err("E_STAGE", "movement cannot read candidate state"));
@@ -2653,11 +2193,7 @@ impl<'a> Compiler<'a> {
                 {
                     return Err(err("E_WRITER", "an archetype has exactly one move effect"));
                 }
-                EffectKind::Move {
-                    arch: a,
-                    turn,
-                    speed,
-                }
+                EffectKind::Move { arch: a, turn, speed }
             }
             "death" => {
                 let Dom::Entities(a) = rc_dom else {
@@ -2699,22 +2235,14 @@ impl<'a> Compiler<'a> {
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| err("E_ARGS", "birth leg needs 'amount'"))?;
                     let ai = &self.schema.archetypes[a as usize];
-                    let fi = ai
-                        .field(f)
-                        .ok_or_else(|| err("E_UNKNOWN_FIELD", format!("unknown field {f}")))?;
+                    let fi = ai.field(f).ok_or_else(|| err("E_UNKNOWN_FIELD", format!("unknown field {f}")))?;
                     let FieldPolicy::Reservoir { .. } = ai.fields[fi].policy else {
-                        return Err(err(
-                            "E_WRITER",
-                            format!("birth can only transfer reservoirs, {f} is not one"),
-                        ));
+                        return Err(err("E_WRITER", format!("birth can only transfer reservoirs, {f} is not one")));
                     };
                     let unit = ai.fields[fi].unit;
                     let (slot, at) = self.input(ri, amt, "amount")?;
                     if at.unit != unit {
-                        return Err(err(
-                            "E_UNIT",
-                            format!("birth transfer of {f} must be {unit}, got {}", at.unit),
-                        ));
+                        return Err(err("E_UNIT", format!("birth transfer of {f} must be {unit}, got {}", at.unit)));
                     }
                     check_dom(self, &at)?;
                     legs.push((fi, slot));
@@ -2758,10 +2286,7 @@ impl<'a> Compiler<'a> {
         }
         if !matches!(
             kind,
-            EffectKind::Process { .. }
-                | EffectKind::EdgeTransfer { .. }
-                | EffectKind::RateCell { .. }
-                | EffectKind::RateEntity { .. }
+            EffectKind::Process { .. } | EffectKind::EdgeTransfer { .. } | EffectKind::RateCell { .. } | EffectKind::RateEntity { .. }
         ) {
             return Err(err(
                 "E_SCOPE",
@@ -2782,12 +2307,10 @@ impl<'a> Compiler<'a> {
         };
         let mut cov: Option<Slot> = None;
         if let Some(region) = &scope.region {
-            let r = self.schema.region(region).ok_or_else(|| {
-                err(
-                    "E_UNKNOWN_REGION",
-                    format!("scope region {region} does not exist"),
-                )
-            })?;
+            let r = self
+                .schema
+                .region(region)
+                .ok_or_else(|| err("E_UNKNOWN_REGION", format!("scope region {region} does not exist")))?;
             let cells = self.emit(Op::Region(r), vec![], unit_t(Dom::Cells(0)), &src);
             cov = Some(match dom {
                 Dom::Cells(_) => cells,
@@ -2798,9 +2321,7 @@ impl<'a> Compiler<'a> {
                     let h = self.emit(Op::Const(0.5), vec![], unit_t(Dom::Uniform), &src);
                     self.emit(Op::Mul, vec![s, h], unit_t(Dom::Edges(g)), &src)
                 }
-                Dom::Entities(a) => {
-                    self.emit(Op::Sample, vec![cells], unit_t(Dom::Entities(a)), &src)
-                }
+                Dom::Entities(a) => self.emit(Op::Sample, vec![cells], unit_t(Dom::Entities(a)), &src),
                 Dom::Uniform => unreachable!(),
             });
         }
@@ -2810,11 +2331,7 @@ impl<'a> Compiler<'a> {
                 return Err(err("E_SCOPE", "scope predicate must be a snapshot bool"));
             }
             self.unify_dom(pt.dom, dom)?;
-            let pd = if pt.dom == Dom::Uniform {
-                Dom::Uniform
-            } else {
-                dom
-            };
+            let pd = if pt.dom == Dom::Uniform { Dom::Uniform } else { dom };
             let as_num = self.emit(Op::Relabel, vec![ps], unit_t(pd), &src);
             cov = Some(match cov {
                 Some(c) => self.emit(Op::Mul, vec![c, as_num], unit_t(dom), &src),
@@ -2833,20 +2350,13 @@ impl<'a> Compiler<'a> {
                     continue;
                 };
                 for (fi, f) in a.fields.iter().enumerate() {
-                    let Policy::Reservoir {
-                        capacity: Some(cap),
-                        ..
-                    } = &f.policy
-                    else {
+                    let Policy::Reservoir { capacity: Some(cap), .. } = &f.policy else {
                         continue;
                     };
                     if !self.nodes.contains_key(cap) {
                         self.diags.push(err(
                             "E_CAPACITY",
-                            format!(
-                                "capacity of {}.{} must name a node as rule_id/node_id, got {cap}",
-                                a.id, f.id
-                            ),
+                            format!("capacity of {}.{} must name a node as rule_id/node_id, got {cap}", a.id, f.id),
                         ));
                         continue;
                     }
@@ -2862,14 +2372,14 @@ impl<'a> Compiler<'a> {
                             } else {
                                 self.diags.push(err(
                                     "E_CAPACITY",
-                                    format!("capacity {cap} of {}.{} must be a snapshot {} value over its archetype", a.id, f.id, self.schema.archetypes[ai].fields[fi].unit),
+                                    format!(
+                                        "capacity {cap} of {}.{} must be a snapshot {} value over its archetype",
+                                        a.id, f.id, self.schema.archetypes[ai].fields[fi].unit
+                                    ),
                                 ));
                             }
                         }
-                        Ok(_) => self.diags.push(err(
-                            "E_CAPACITY",
-                            format!("capacity {cap} must be a value node"),
-                        )),
+                        Ok(_) => self.diags.push(err("E_CAPACITY", format!("capacity {cap} must be a value node"))),
                         Err(d) => self.diags.push(d),
                     }
                 }
@@ -2878,19 +2388,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn check_rule_effect_lists(&mut self) {
-        let rules: Vec<(String, Vec<String>)> = self
-            .rules
-            .iter()
-            .map(|(r, rc)| (rc.id.clone(), r.effects.clone()))
-            .collect();
+        let rules: Vec<(String, Vec<String>)> = self.rules.iter().map(|(r, rc)| (rc.id.clone(), r.effects.clone())).collect();
         for (rid, listed) in rules {
             if listed.is_empty() {
                 continue;
             }
-            let listed: BTreeSet<String> = listed
-                .iter()
-                .map(|e| e.split('.').next().unwrap().to_string())
-                .collect();
+            let listed: BTreeSet<String> = listed.iter().map(|e| e.split('.').next().unwrap().to_string()).collect();
             let actual: BTreeSet<String> = self
                 .effects
                 .iter()
@@ -2898,22 +2401,12 @@ impl<'a> Compiler<'a> {
                 .map(|e| e.id.split_once('/').unwrap().1.to_string())
                 .collect();
             for m in listed.difference(&actual) {
-                self.diags.push(
-                    err(
-                        "E_EFFECTS",
-                        format!("listed effect {m} is not an effect node"),
-                    )
-                    .at(&rid, None, None),
-                );
+                self.diags
+                    .push(err("E_EFFECTS", format!("listed effect {m} is not an effect node")).at(&rid, None, None));
             }
             for m in actual.difference(&listed) {
-                self.diags.push(
-                    err(
-                        "E_EFFECTS",
-                        format!("effect node {m} is missing from the rule's effects list"),
-                    )
-                    .at(&rid, None, None),
-                );
+                self.diags
+                    .push(err("E_EFFECTS", format!("effect node {m} is missing from the rule's effects list")).at(&rid, None, None));
             }
         }
     }
@@ -2922,9 +2415,7 @@ impl<'a> Compiler<'a> {
         let mut next_writers: BTreeMap<String, Vec<String>> = BTreeMap::new();
         for e in &self.effects {
             let target = match &e.kind {
-                EffectKind::NextCell { field, .. } => {
-                    Some(self.schema.cell_fields[*field].id.clone())
-                }
+                EffectKind::NextCell { field, .. } => Some(self.schema.cell_fields[*field].id.clone()),
                 EffectKind::NextEntity { arch, field, .. } => {
                     let a = &self.schema.archetypes[*arch as usize];
                     Some(format!("{}.{}", a.id, a.fields[*field].id))
@@ -2939,16 +2430,16 @@ impl<'a> Compiler<'a> {
             if ws.len() > 1 {
                 self.diags.push(err(
                     "E_MULTIPLE_WRITERS",
-                    format!("field {f} has {} exclusive next-value writers ({}); combine their values in the graph before a single writer", ws.len(), ws.join(", ")),
+                    format!(
+                        "field {f} has {} exclusive next-value writers ({}); combine their values in the graph before a single writer",
+                        ws.len(),
+                        ws.join(", ")
+                    ),
                 ));
             }
         }
         // Unused pure nodes are allowed but reported.
-        let used: BTreeSet<Slot> = self
-            .instrs
-            .iter()
-            .flat_map(|i| i.inputs.iter().copied())
-            .collect();
+        let used: BTreeSet<Slot> = self.instrs.iter().flat_map(|i| i.inputs.iter().copied()).collect();
         let effect_inputs: BTreeSet<Slot> = self.effects.iter().flat_map(effect_slots).collect();
         let cap_slots: BTreeSet<Slot> = self
             .schema
@@ -2971,12 +2462,7 @@ impl<'a> Compiler<'a> {
         for u in unused {
             let (r, n) = u.split_once('/').unwrap_or(("", &u));
             let (r, n) = (r.to_string(), n.to_string());
-            self.warn(
-                "W_UNUSED",
-                format!("node {u} does not reach any effect"),
-                Some(&r),
-                Some(&n),
-            );
+            self.warn("W_UNUSED", format!("node {u} does not reach any effect"), Some(&r), Some(&n));
         }
     }
 
@@ -3043,8 +2529,7 @@ impl<'a> Compiler<'a> {
                 _ => 1,
             };
             ops = ops.saturating_add(n.saturating_mul(w));
-            bytes =
-                bytes.saturating_add(n.saturating_mul(8).saturating_mul(i.outputs.len() as u64));
+            bytes = bytes.saturating_add(n.saturating_mul(8).saturating_mul(i.outputs.len() as u64));
         }
         let mut effect_elems = 0u64;
         for e in &self.effects {
@@ -3091,11 +2576,7 @@ pub fn effect_slots(e: &Effect) -> Vec<Slot> {
         EffectKind::NextCell { value, .. } | EffectKind::NextEntity { value, .. } => vec![*value],
         EffectKind::Move { turn, speed, .. } => vec![*turn, *speed],
         EffectKind::Death { condition, .. } => vec![*condition],
-        EffectKind::Birth {
-            condition, legs, ..
-        } => std::iter::once(*condition)
-            .chain(legs.iter().map(|l| l.1))
-            .collect(),
+        EffectKind::Birth { condition, legs, .. } => std::iter::once(*condition).chain(legs.iter().map(|l| l.1)).collect(),
     };
     if let Some(c) = e.coverage {
         v.push(c);
@@ -3119,10 +2600,7 @@ fn mul_quantity(a: &Option<String>, b: &Option<String>) -> Option<String> {
 }
 
 pub fn valid_id(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() <= MAX_ID_LEN
-        && s.chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/'))
+    !s.is_empty() && s.len() <= MAX_ID_LEN && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/'))
 }
 
 fn arg_str(node: &Node, key: &str) -> R<String> {
@@ -3130,19 +2608,11 @@ fn arg_str(node: &Node, key: &str) -> R<String> {
         .get(key)
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| {
-            err(
-                "E_ARGS",
-                format!("op {} requires string argument '{key}'", node.op),
-            )
-        })
+        .ok_or_else(|| err("E_ARGS", format!("op {} requires string argument '{key}'", node.op)))
 }
 
 fn arg_opt_str(node: &Node, key: &str) -> Option<String> {
-    node.args
-        .get(key)
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+    node.args.get(key).and_then(|v| v.as_str()).map(|s| s.to_string())
 }
 
 fn arg_f64(node: &Node, key: &str) -> R<f64> {
@@ -3150,10 +2620,5 @@ fn arg_f64(node: &Node, key: &str) -> R<f64> {
         .get(key)
         .and_then(|v| v.as_f64())
         .filter(|v| v.is_finite() && v.abs() < 1e300)
-        .ok_or_else(|| {
-            err(
-                "E_ARGS",
-                format!("op {} requires finite numeric argument '{key}'", node.op),
-            )
-        })
+        .ok_or_else(|| err("E_ARGS", format!("op {} requires finite numeric argument '{key}'", node.op)))
 }

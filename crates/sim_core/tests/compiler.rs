@@ -23,16 +23,8 @@ fn t01_reject_adding_water_to_temperature_and_name_ports() {
     let e = d.iter().find(|x| x.code == "E_UNIT").expect("unit error");
     assert_eq!(e.rule.as_deref(), Some("bad"));
     assert_eq!(e.node.as_deref(), Some("sum"));
-    assert!(
-        e.message.contains("inputs[0]") && e.message.contains("inputs[1]"),
-        "{}",
-        e.message
-    );
-    assert!(
-        e.message.contains("kg") && e.message.contains("[K]"),
-        "{}",
-        e.message
-    );
+    assert!(e.message.contains("inputs[0]") && e.message.contains("inputs[1]"), "{}", e.message);
+    assert!(e.message.contains("kg") && e.message.contains("[K]"), "{}", e.message);
 }
 
 #[test]
@@ -71,10 +63,7 @@ fn t01b_reject_same_unit_different_quantity() {
 fn t02_reject_domain_and_grid_mixing() {
     // Cell field mixed with an entity column without an explicit domain operation.
     let mut p = base();
-    p["capabilities"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!("core.entities.v1"));
+    p["capabilities"].as_array_mut().unwrap().push(json!("core.entities.v1"));
     p["archetypes"] = json!([{
         "id": "blob", "fields": [{ "id": "store", "unit": "kg", "policy": { "kind": "reservoir", "resource": "water" } }],
         "traits": [], "brain": { "backend": "mlp.tanh.v1", "inputs": 1, "hidden": 1, "outputs": 1, "weight_bound": 1.0, "init_scale": 0.1 },
@@ -91,15 +80,8 @@ fn t02_reject_domain_and_grid_mixing() {
         ]
     }]);
     let d = compile_err(p.clone());
-    let e = d
-        .iter()
-        .find(|x| x.code == "E_DOMAIN")
-        .expect("domain error");
-    assert!(
-        e.message.contains("cells") && e.message.contains("entities"),
-        "{}",
-        e.message
-    );
+    let e = d.iter().find(|x| x.code == "E_DOMAIN").expect("domain error");
+    assert!(e.message.contains("cells") && e.message.contains("entities"), "{}", e.message);
     // The explicit `sample` operation makes the same expression valid.
     p["rules"][0]["nodes"] = json!([
         { "id": "cell_w", "op": "read_state", "field": "surface_water" },
@@ -111,7 +93,10 @@ fn t02_reject_domain_and_grid_mixing() {
 
     // Two grids: a field on another grid cannot mix with the surface grid.
     let mut p = base();
-    p["fields"].as_array_mut().unwrap().push(json!({ "id": "coarse_w", "grid": "world.coarse", "unit": "kg", "policy": { "kind": "parameter" } }));
+    p["fields"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "id": "coarse_w", "grid": "world.coarse", "unit": "kg", "policy": { "kind": "parameter" } }));
     p["rules"] = json!([rule(
         "grids",
         "cells",
@@ -124,10 +109,7 @@ fn t02_reject_domain_and_grid_mixing() {
     let mut e2 = env(4, 4);
     e2.grids.push("world.coarse".into());
     let d = compiler::compile(&[pkg(p)], &e2).unwrap_err();
-    let e = d
-        .iter()
-        .find(|x| x.code == "E_DOMAIN")
-        .expect("grid identity error");
+    let e = d.iter().find(|x| x.code == "E_DOMAIN").expect("grid identity error");
     assert!(e.message.contains("world.coarse"), "{}", e.message);
 }
 
@@ -145,15 +127,8 @@ fn t03_cycles_rejected_and_explicit_feedback_accepted() {
             ]),
         )],
     ));
-    let e = d
-        .iter()
-        .find(|x| x.code == "E_CYCLE")
-        .expect("cycle diagnostic");
-    assert!(
-        e.message.contains("loop/a") && e.message.contains("loop/b"),
-        "{}",
-        e.message
-    );
+    let e = d.iter().find(|x| x.code == "E_CYCLE").expect("cycle diagnostic");
+    assert!(e.message.contains("loop/a") && e.message.contains("loop/b"), "{}", e.message);
     // Feedback through stored state is fine: memory_next = memory + surface_water.
     compile(with_rules(
         base(),
@@ -196,8 +171,7 @@ fn t04_exclusive_writers_rejected_rate_contributions_combine() {
             ]),
         )
     };
-    compile(with_rules(base(), vec![rate("one"), rate("two")]))
-        .expect("rate contributions combine");
+    compile(with_rules(base(), vec![rate("one"), rate("two")])).expect("rate contributions combine");
     // A conserved reservoir cannot take an arbitrary delta.
     let d = compile_err(with_rules(
         base(),
@@ -317,10 +291,7 @@ fn t08_budgets() {
         max_nodes: 10,
         ..Budgets::default()
     };
-    assert!(has_code(
-        &compiler::compile(&[pkg(p.clone())], &e).unwrap_err(),
-        "E_BUDGET_NODES"
-    ));
+    assert!(has_code(&compiler::compile(&[pkg(p.clone())], &e).unwrap_err(), "E_BUDGET_NODES"));
     let p = with_rules(
         base(),
         vec![rule(
@@ -351,10 +322,7 @@ fn t08_budgets() {
         ..Budgets::default()
     };
     let d = compiler::compile(&[pkg(p)], &e).unwrap_err();
-    assert!(
-        has_code(&d, "E_BUDGET_OPS") && has_code(&d, "E_BUDGET_MEMORY"),
-        "{d:?}"
-    );
+    assert!(has_code(&d, "E_BUDGET_OPS") && has_code(&d, "E_BUDGET_MEMORY"), "{d:?}");
 }
 
 #[test]
@@ -372,18 +340,17 @@ fn stability_limits_are_checked_at_compile_time() {
             ]),
         )],
     );
-    p["rules"][0]["parameters"] = json!({ "k": { "value": 8.0, "unit": "1/s", "min": 0.0, "max": 10.0, "stability": { "kind": "first_order" } } });
+    p["rules"][0]["parameters"] =
+        json!({ "k": { "value": 8.0, "unit": "1/s", "min": 0.0, "max": 10.0, "stability": { "kind": "first_order" } } });
     assert!(has_code(&compile_err(p), "E_NUMERIC_RISK"));
 }
 
 #[test]
 fn standard_pack_compiles_without_warnings() {
     let root = sim_core::assets::asset_root();
-    let (sc, pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (sc, pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     let env = sim_core::world::compile_env(&sc, sc.regions.iter().map(|r| r.id.clone()).collect());
-    let plan = compiler::compile(&pkgs, &env)
-        .unwrap_or_else(|d| panic!("{}", sim_core::world::format_diagnostics(&d)));
+    let plan = compiler::compile(&pkgs, &env).unwrap_or_else(|d| panic!("{}", sim_core::world::format_diagnostics(&d)));
     let warnings: Vec<String> = plan.warnings.iter().map(|w| w.to_string()).collect();
     assert!(warnings.is_empty(), "{warnings:#?}");
 }

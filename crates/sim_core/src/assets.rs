@@ -12,11 +12,7 @@ pub const MAX_SCENARIO_BYTES: u64 = 64 << 20;
 pub fn read_bounded(path: &Path, max: u64) -> Result<String, String> {
     let meta = std::fs::metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if meta.len() > max {
-        return Err(format!(
-            "{} is {} bytes, over the {max} byte limit",
-            path.display(),
-            meta.len()
-        ));
+        return Err(format!("{} is {} bytes, over the {max} byte limit", path.display(), meta.len()));
     }
     std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))
 }
@@ -36,8 +32,7 @@ pub fn parse_scenario(text: &str) -> Result<Scenario, String> {
 }
 
 pub fn load_package(path: &Path) -> Result<Package, String> {
-    parse_package(&read_bounded(path, MAX_PACKAGE_BYTES)?)
-        .map_err(|e| format!("{}: {e}", path.display()))
+    parse_package(&read_bounded(path, MAX_PACKAGE_BYTES)?).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Repository asset root: `$EVOLVING_WORLDS_ASSETS`, else `assets/` found by walking up from the cwd.
@@ -59,15 +54,12 @@ pub fn asset_root() -> PathBuf {
 
 /// Load a scenario and the packages it names (resolved in `<assets>/rules/**`).
 pub fn load_scenario(path: &Path) -> Result<(Scenario, Vec<Package>), String> {
-    let sc = parse_scenario(&read_bounded(path, MAX_SCENARIO_BYTES)?)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let sc = parse_scenario(&read_bounded(path, MAX_SCENARIO_BYTES)?).map_err(|e| format!("{}: {e}", path.display()))?;
     let root = asset_root().join("rules");
     let mut pkgs = vec![];
     for name in &sc.packages {
         if name.contains("..") || name.starts_with('/') {
-            return Err(format!(
-                "package path {name} must stay inside the rules directory"
-            ));
+            return Err(format!("package path {name} must stay inside the rules directory"));
         }
         pkgs.push(load_package(&root.join(name))?);
     }

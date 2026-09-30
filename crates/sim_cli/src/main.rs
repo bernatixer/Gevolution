@@ -42,11 +42,7 @@ fn main() {
                 i += 1;
                 let (t, rest) = args[i].split_once(':').expect("--set TICK:name=value");
                 let (n, v) = rest.split_once('=').expect("--set TICK:name=value");
-                sets.push((
-                    t.parse::<u64>().expect("tick"),
-                    n.to_string(),
-                    v.parse::<f64>().expect("value"),
-                ));
+                sets.push((t.parse::<u64>().expect("tick"), n.to_string(), v.parse::<f64>().expect("value")));
             }
             "--size" => {
                 i += 1;
@@ -57,8 +53,7 @@ fn main() {
         }
         i += 1;
     }
-    let path =
-        scenario.unwrap_or_else(|| assets::asset_root().join("scenarios/seasonal_river.json"));
+    let path = scenario.unwrap_or_else(|| assets::asset_root().join("scenarios/seasonal_river.json"));
     let (mut sc, pkgs) = assets::load_scenario(&path).unwrap_or_else(|e| {
         eprintln!("{e}");
         std::process::exit(2)
@@ -101,12 +96,10 @@ fn main() {
         println!("  warning: {d}");
     }
     for (t, n, v) in sets {
-        w.submit(
-            sim_core::commands::CommandKind::SetParam { name: n, value: v },
-            Some(t),
-        );
+        w.submit(sim_core::commands::CommandKind::SetParam { name: n, value: v }, Some(t));
     }
     let mut times = vec![];
+    let mut phase = sim_core::world::PhaseTimings::default();
     for t in 0..ticks {
         let s = Instant::now();
         if let Err(f) = w.step() {
@@ -114,6 +107,20 @@ fn main() {
             std::process::exit(1);
         }
         times.push(s.elapsed().as_secs_f64() * 1e3);
+        let p = &w.timings;
+        for (acc, v) in [
+            (&mut phase.commands, p.commands),
+            (&mut phase.snapshot, p.snapshot),
+            (&mut phase.evaluation, p.evaluation),
+            (&mut phase.resolution, p.resolution),
+            (&mut phase.receipts, p.receipts),
+            (&mut phase.integration, p.integration),
+            (&mut phase.lifecycle, p.lifecycle),
+            (&mut phase.validation, p.validation),
+            (&mut phase.commit, p.commit),
+        ] {
+            *acc += v / ticks as f64;
+        }
         if (t + 1) % every == 0 || t + 1 == ticks {
             report(&w);
             if budget {
@@ -123,11 +130,18 @@ fn main() {
     }
     times.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let p = |q: f64| times[((times.len() as f64 - 1.0) * q) as usize];
+    println!("tick ms: median {:.2}  p95 {:.2}  max {:.2}", p(0.5), p(0.95), p(1.0));
     println!(
-        "tick ms: median {:.2}  p95 {:.2}  max {:.2}",
-        p(0.5),
-        p(0.95),
-        p(1.0)
+        "mean phase ms: commands {:.2} snapshot {:.2} eval {:.2} resolve {:.2} receipts {:.2} integrate {:.2} lifecycle {:.2} validate {:.2} commit {:.2}",
+        phase.commands,
+        phase.snapshot,
+        phase.evaluation,
+        phase.resolution,
+        phase.receipts,
+        phase.integration,
+        phase.lifecycle,
+        phase.validation,
+        phase.commit
     );
     println!("state hash {:016x}", w.state.hash());
 }
@@ -179,13 +193,7 @@ fn report(w: &World) {
             .traits
             .iter()
             .enumerate()
-            .map(|(t, ti)| {
-                format!(
-                    "{}={:.3}",
-                    ti.id,
-                    (0..e.len()).map(|i| e.genome_of(i)[t]).sum::<f64>() / m
-                )
-            })
+            .map(|(t, ti)| format!("{}={:.3}", ti.id, (0..e.len()).map(|i| e.genome_of(i)[t]).sum::<f64>() / m))
             .collect();
         let generation = e.lineage.iter().map(|l| l.generation as f64).sum::<f64>() / m;
         let age = e.age.iter().sum::<f64>() / m;
@@ -215,18 +223,8 @@ fn budget_report(w: &World) {
         let legs: Vec<String> = acc
             .iter()
             .zip(req)
-            .map(|(a, r)| {
-                format!(
-                    "{:.3e}/{:.3e}",
-                    a.iter().sum::<f64>() / dt,
-                    r.iter().sum::<f64>() / dt
-                )
-            })
+            .map(|(a, r)| format!("{:.3e}/{:.3e}", a.iter().sum::<f64>() / dt, r.iter().sum::<f64>() / dt))
             .collect();
-        println!(
-            "      {:48} accepted/requested per s: {}",
-            eff.id,
-            legs.join("  ")
-        );
+        println!("      {:48} accepted/requested per s: {}", eff.id, legs.join("  "));
     }
 }

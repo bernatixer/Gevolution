@@ -10,14 +10,8 @@ use sim_core::{RunConfig, World, biology, persistence};
 /// A minimal archetype with direct, brain-free rules for exact fixtures.
 fn blob_pkg(rules: Vec<Value>, cooldown: f64) -> Value {
     let mut p = base();
-    p["capabilities"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!("core.entities.v1"));
-    p["resources"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!({ "id": "energy", "unit": "J" }));
+    p["capabilities"].as_array_mut().unwrap().push(json!("core.entities.v1"));
+    p["resources"].as_array_mut().unwrap().push(json!({ "id": "energy", "unit": "J" }));
     p["accounts"]
         .as_array_mut()
         .unwrap()
@@ -55,9 +49,7 @@ fn blob_world(rules: Vec<Value>, initial: Value, count: usize, cooldown: f64) ->
         json!([{ "id": "a", "shape": { "kind": "rect", "x0": 0, "z0": 0, "x1": 1, "z1": 1 } }]),
         0.0,
     );
-    sc.populations =
-        serde_json::from_value(json!([{ "archetype": "blob", "count": count, "region": "a" }]))
-            .unwrap();
+    sc.populations = serde_json::from_value(json!([{ "archetype": "blob", "count": count, "region": "a" }])).unwrap();
     world(sc, vec![blob_pkg(rules, cooldown)], RunConfig::reference())
 }
 
@@ -133,11 +125,7 @@ fn t20_partially_funded_movement_and_single_location_eating() {
     }
     w.step().unwrap();
     let e = &w.state.entities[0];
-    assert!(
-        (e.x[0] - 10.3).abs() < 1e-9,
-        "moved only the funded quarter: x = {}",
-        e.x[0]
-    );
+    assert!((e.x[0] - 10.3).abs() < 1e-9, "moved only the funded quarter: x = {}", e.x[0]);
     assert_eq!(col(&w, "energy")[0], 0.0);
     let sw = field(&w, "surface_water");
     assert_eq!(sw[0], 99.0);
@@ -181,21 +169,11 @@ fn t21_births_transfer_atomically_rejections_cost_nothing_newborns_wait() {
     assert_eq!(w.population(), 2);
     let s = col(&w, "store");
     assert_eq!(s[0], 6.0 + 1.0 - 2.0);
-    assert_eq!(
-        s[1], 2.0,
-        "newborn holds exactly the transferred amount and has not drunk yet"
-    );
+    assert_eq!(s[1], 2.0, "newborn holds exactly the transferred amount and has not drunk yet");
     assert!((w.ledger[0].total - total).abs() < 1e-12);
-    assert_eq!(
-        w.state.entities[0].lineage[1].parent,
-        w.state.entities[0].ids[0]
-    );
+    assert_eq!(w.state.entities[0].lineage[1].parent, w.state.entities[0].ids[0]);
     w.step().unwrap();
-    assert_eq!(
-        col(&w, "store")[1],
-        3.0,
-        "newborn acts from the following tick"
-    );
+    assert_eq!(col(&w, "store")[1], 3.0, "newborn acts from the following tick");
 
     // A birth the parent cannot fund is rejected and costs nothing.
     let mut w = blob_world(vec![birth_rule(50.0, 0.0)], json!({}), 1, 1000.0);
@@ -220,11 +198,7 @@ fn t22_death_disposes_resources_and_precedes_birth() {
     w.step().unwrap();
     assert_eq!(w.population(), 0, "dying parents do not reproduce");
     assert_eq!(w.stats.births, 0);
-    assert_eq!(
-        field(&w, "soil_water")[0],
-        18.0,
-        "every organism's water is deposited in its cell"
-    );
+    assert_eq!(field(&w, "soil_water")[0], 18.0, "every organism's water is deposited in its cell");
     assert!((w.ledger[0].total - water0).abs() < 1e-12);
     let heat = w.schema().account("external.heat").unwrap();
     assert_eq!(w.state.account_out[heat], 3.0);
@@ -234,8 +208,7 @@ fn t22_death_disposes_resources_and_precedes_birth() {
 #[test]
 fn t23_mutation_preserves_validity_varies_offspring_and_leaves_parents() {
     let root = sim_core::assets::asset_root();
-    let (sc, pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (sc, pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     let env = sim_core::world::compile_env(&sc, vec!["upstream".into(), "basin".into()]);
     let plan = sim_core::compiler::compile(&pkgs, &env).unwrap();
     let a = &plan.schema.archetypes[0];
@@ -269,32 +242,21 @@ fn forager(pref: f64, count: usize) -> Value {
 #[test]
 fn t24_thermal_trade_offs_differ_between_hot_and_cool_fixtures() {
     let root = sim_core::assets::asset_root();
-    let (base_sc, pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (base_sc, pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     let run = |ambient: f64, seed: u64| -> (f64, f64) {
         let mut sc = base_sc.clone();
         sc.seed = seed;
         sc.grid.width = 48;
         sc.grid.height = 48;
         sc.regions.clear();
-        sc.weather
-            .signals
-            .get_mut("ambient_temperature")
-            .unwrap()
-            .mean = ambient;
-        sc.weather
-            .signals
-            .get_mut("ambient_temperature")
-            .unwrap()
-            .amplitude = 0.0;
+        sc.weather.signals.get_mut("ambient_temperature").unwrap().mean = ambient;
+        sc.weather.signals.get_mut("ambient_temperature").unwrap().amplitude = 0.0;
         // Start the fixture at its own thermal equilibrium, not the default scenario's.
         sc.initial.insert(
             "temperature".into(),
-            serde_json::from_value(json!({ "kind": "elevation", "a": ambient + 2.0, "b": -10.0 }))
-                .unwrap(),
+            serde_json::from_value(json!({ "kind": "elevation", "a": ambient + 2.0, "b": -10.0 })).unwrap(),
         );
-        sc.populations =
-            serde_json::from_value(json!([forager(284.0, 40), forager(302.0, 40)])).unwrap();
+        sc.populations = serde_json::from_value(json!([forager(284.0, 40), forager(302.0, 40)])).unwrap();
         let mut w = World::new(
             sc,
             pkgs.clone(),
@@ -315,9 +277,7 @@ fn t24_thermal_trade_offs_differ_between_hot_and_cool_fixtures() {
     for seed in [1, 2, 3] {
         let (c_cool, h_cool) = run(284.0, seed);
         let (c_hot, h_hot) = run(302.0, seed);
-        println!(
-            "T24 seed {seed}: cool fixture cool/hot-adapted {c_cool}/{h_cool}; hot fixture {c_hot}/{h_hot}"
-        );
+        println!("T24 seed {seed}: cool fixture cool/hot-adapted {c_cool}/{h_cool}; hot fixture {c_hot}/{h_hot}");
         if h_hot > c_hot {
             hot_wins += 1;
         }
@@ -333,15 +293,11 @@ fn t24_thermal_trade_offs_differ_between_hot_and_cool_fixtures() {
 
 fn river(size: usize, config: RunConfig) -> World {
     let root = sim_core::assets::asset_root();
-    let (mut sc, pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (mut sc, pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     sc.grid.width = size;
     sc.grid.height = size;
     sc.regions.retain(|r| r.id == "upstream");
-    sc.regions[0].shape = serde_json::from_value(
-        json!({ "kind": "rect", "x0": 0, "z0": 0, "x1": size, "z1": size / 3 }),
-    )
-    .unwrap();
+    sc.regions[0].shape = serde_json::from_value(json!({ "kind": "rect", "x0": 0, "z0": 0, "x1": size, "z1": size / 3 })).unwrap();
     sc.populations[0].count = 120;
     World::new(sc, pkgs, config).unwrap()
 }
@@ -388,15 +344,10 @@ fn t26_save_load_continuation_equals_uninterrupted_execution() {
     assert_eq!(a.log, b.log);
     // Incompatible build/profile metadata is reported, not silently accepted.
     let needle = b"strict-reference.f64.v1";
-    let at = bytes
-        .windows(needle.len())
-        .position(|w| w == needle)
-        .unwrap();
+    let at = bytes.windows(needle.len()).position(|w| w == needle).unwrap();
     let mut tampered = bytes.clone();
     tampered[at + needle.len() - 1] = b'0';
-    let err = persistence::load(&tampered, RunConfig::default())
-        .err()
-        .expect("rejected");
+    let err = persistence::load(&tampered, RunConfig::default()).err().expect("rejected");
     assert!(err.contains("incompatible build"), "{err}");
 }
 
@@ -412,7 +363,11 @@ fn t28_invalid_hot_swap_leaves_old_rules_and_world_intact() {
     b.run(20).unwrap();
     assert_eq!(a.plan().source_hash, plan_before);
     assert_eq!(a.state.hash(), b.state.hash());
-    assert!(a.events.iter().any(|e| matches!(&e.kind, sim_core::world::EventKind::CommandRejected { reason, .. } if reason.contains("no_such_op"))));
+    assert!(
+        a.events
+            .iter()
+            .any(|e| matches!(&e.kind, sim_core::world::EventKind::CommandRejected { reason, .. } if reason.contains("no_such_op")))
+    );
     // An out-of-range parameter edit is rejected too.
     a.submit(
         CommandKind::SetParam {
@@ -435,10 +390,7 @@ fn t29_inspection_does_not_change_authoritative_state() {
         b.step().unwrap();
         for c in [0, 100, 500] {
             let x = b.explain_cell("surface_water", c).unwrap();
-            assert!(
-                x.other.abs() < 1e-6,
-                "explanation accounts for the change: {x:?}"
-            );
+            assert!(x.other.abs() < 1e-6, "explanation accounts for the change: {x:?}");
             b.explain_cell("temperature", c).unwrap();
         }
         if let Some(&id) = b.state.entities[0].ids.first() {
@@ -479,22 +431,12 @@ fn t30_player_rule_survives_save_load_with_identical_results() {
     player = serde_json::from_str(&serde_json::to_string_pretty(&player).unwrap()).unwrap();
     pkgs.push(player);
     let mut b = river(32, RunConfig::default());
-    a.submit(
-        CommandKind::ApplyPackages {
-            packages: pkgs.clone(),
-        },
-        None,
-    );
+    a.submit(CommandKind::ApplyPackages { packages: pkgs.clone() }, None);
     b.submit(CommandKind::ApplyPackages { packages: pkgs }, None);
     a.run(30).unwrap();
     let saved = persistence::save(&a);
     let mut c = persistence::load(&saved, RunConfig::default()).unwrap();
-    assert!(
-        c.plan()
-            .effects
-            .iter()
-            .any(|e| e.id == "player.dry_upstream/dry")
-    );
+    assert!(c.plan().effects.iter().any(|e| e.id == "player.dry_upstream/dry"));
     a.run(30).unwrap();
     b.run(60).unwrap();
     c.run(30).unwrap();

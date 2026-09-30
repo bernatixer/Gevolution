@@ -55,11 +55,7 @@ impl World {
     /// Value of a plan slot for an element, from the last tick's buffers.
     pub fn slot_value(&self, slot: Slot, i: usize) -> Option<f64> {
         let b = self.buffers().slots.get(slot)?;
-        if b.len() == 1 {
-            Some(b[0])
-        } else {
-            b.get(i).copied()
-        }
+        if b.len() == 1 { Some(b[0]) } else { b.get(i).copied() }
     }
 
     fn limiting(&self, e: usize, elem: usize) -> Option<String> {
@@ -74,41 +70,24 @@ impl World {
         let eff = &plan.effects[e];
         let desc = |ep: Endpoint, dest: bool| -> Option<(f64, String)> {
             let (f, cell) = match (ep, eff.dom) {
-                (Endpoint::Cell(f), Dom::Entities(a)) => {
-                    (f, last.spatial[a as usize].cell_of[elem] as usize)
-                }
+                (Endpoint::Cell(f), Dom::Entities(a)) => (f, last.spatial[a as usize].cell_of[elem] as usize),
                 (Endpoint::Cell(f), _) => (f, elem),
                 (Endpoint::EdgeA(f), _) => (f, self.grid.edge_cells(elem).0),
                 (Endpoint::EdgeB(f), _) => (f, self.grid.edge_cells(elem).1),
                 (Endpoint::Entity(a, f), _) => {
                     let af = &s.archetypes[a as usize].fields[f];
-                    return Some((
-                        alpha,
-                        format!(
-                            "{} of the organism{}",
-                            af.id,
-                            if dest { " (capacity)" } else { "" }
-                        ),
-                    ));
+                    return Some((alpha, format!("{} of the organism{}", af.id, if dest { " (capacity)" } else { "" })));
                 }
                 _ => return None,
             };
-            let tab = if dest {
-                &r.dest_factor[f]
-            } else {
-                &r.source_factor[f]
-            };
+            let tab = if dest { &r.dest_factor[f] } else { &r.source_factor[f] };
             let v = tab.as_ref()?[cell];
             Some((
                 v,
                 format!(
                     "{} at cell {cell}{}",
                     s.cell_fields[f].id,
-                    if dest {
-                        " (capacity)"
-                    } else {
-                        " (available inventory)"
-                    }
+                    if dest { " (capacity)" } else { " (available inventory)" }
                 ),
             ))
         };
@@ -124,13 +103,7 @@ impl World {
                 let (a, b) = self.grid.edge_cells(elem);
                 let src = if r.edge_dir[e][elem] { a } else { b };
                 if let Some(t) = &r.source_factor[*field] {
-                    cands.push((
-                        t[src],
-                        format!(
-                            "{} at cell {src} (available inventory)",
-                            s.cell_fields[*field].id
-                        ),
-                    ));
+                    cands.push((t[src], format!("{} at cell {src} (available inventory)", s.cell_fields[*field].id)));
                 }
             }
             _ => {}
@@ -153,39 +126,38 @@ impl World {
         let current = self.state.cells[f][cell];
         let r = &last.resolved;
         let mut contributions: Vec<Contribution> = vec![];
-        let mut push =
-            |w: &World, e: usize, sign: f64, elems: &[usize], leg: usize, suffix: &str| {
-                let eff = &plan.effects[e];
-                let (mut req, mut acc, mut minf, mut lim) = (0.0, 0.0, 1.0f64, None);
-                let mut n = 0;
-                for &el in elems {
-                    let q = r.receipts.requested[e][leg][el];
-                    if q == 0.0 {
-                        continue;
-                    }
-                    n += 1;
-                    req += q;
-                    acc += r.accepted[e][leg][el];
-                    let a = r.receipts.alpha[e][el];
-                    if a < minf {
-                        minf = a;
-                        lim = w.limiting(e, el);
-                    }
+        let mut push = |w: &World, e: usize, sign: f64, elems: &[usize], leg: usize, suffix: &str| {
+            let eff = &plan.effects[e];
+            let (mut req, mut acc, mut minf, mut lim) = (0.0, 0.0, 1.0f64, None);
+            let mut n = 0;
+            for &el in elems {
+                let q = r.receipts.requested[e][leg][el];
+                if q == 0.0 {
+                    continue;
                 }
-                if n == 0 {
-                    return;
+                n += 1;
+                req += q;
+                acc += r.accepted[e][leg][el];
+                let a = r.receipts.alpha[e][el];
+                if a < minf {
+                    minf = a;
+                    lim = w.limiting(e, el);
                 }
-                contributions.push(Contribution {
-                    effect: eff.id.clone(),
-                    rule: eff.rule.clone(),
-                    label: format!("{}{suffix}", rule_label(w, &eff.rule)),
-                    requested: sign * req,
-                    accepted: sign * acc,
-                    elements: n,
-                    min_factor: minf,
-                    limited_by: lim,
-                });
-            };
+            }
+            if n == 0 {
+                return;
+            }
+            contributions.push(Contribution {
+                effect: eff.id.clone(),
+                rule: eff.rule.clone(),
+                label: format!("{}{suffix}", rule_label(w, &eff.rule)),
+                requested: sign * req,
+                accepted: sign * acc,
+                elements: n,
+                min_factor: minf,
+                limited_by: lim,
+            });
+        };
         match info.policy {
             FieldPolicy::Reservoir { .. } => {
                 for &(e, l, t) in &last.active.index.cell[f] {
@@ -216,21 +188,13 @@ impl World {
                             let dir = &r.edge_dir[e];
                             let (mut outs, mut ins) = (vec![], vec![]);
                             for (edge, is_a) in self.grid.incident(cell).into_iter().flatten() {
-                                if dir[edge] == is_a {
-                                    outs.push(edge)
-                                } else {
-                                    ins.push(edge)
-                                }
+                                if dir[edge] == is_a { outs.push(edge) } else { ins.push(edge) }
                             }
                             push(self, e, 1.0, &ins, 0, " (inflow)");
                             push(self, e, -1.0, &outs, 0, " (outflow)");
                         }
                         Touch::EntCellOut(a) | Touch::EntCellIn(a) => {
-                            let members: Vec<usize> = last.spatial[a as usize]
-                                .in_cell(cell)
-                                .iter()
-                                .map(|m| *m as usize)
-                                .collect();
+                            let members: Vec<usize> = last.spatial[a as usize].in_cell(cell).iter().map(|m| *m as usize).collect();
                             let out = matches!(t, Touch::EntCellOut(_));
                             push(self, e, if out { -1.0 } else { 1.0 }, &members, l, "");
                         }
@@ -243,9 +207,7 @@ impl World {
                         && tf == f
                     {
                         let v = self.slot_value(rate, cell).unwrap_or(0.0)
-                            * e.coverage
-                                .and_then(|c| self.slot_value(c, cell))
-                                .unwrap_or(1.0)
+                            * e.coverage.and_then(|c| self.slot_value(c, cell)).unwrap_or(1.0)
                             * self.scenario.dt;
                         contributions.push(Contribution {
                             effect: e.id.clone(),
@@ -269,11 +231,7 @@ impl World {
             field: field.to_string(),
             unit: info.unit.to_string(),
             cell,
-            policy: format!("{:?}", info.policy)
-                .split_whitespace()
-                .next()
-                .unwrap_or("")
-                .to_string(),
+            policy: format!("{:?}", info.policy).split_whitespace().next().unwrap_or("").to_string(),
             previous,
             current,
             contributions,
@@ -301,22 +259,12 @@ impl World {
             .map(|b| {
                 b.inputs
                     .iter()
-                    .map(|&sl| {
-                        (
-                            plan.slots[sl].name.clone(),
-                            self.slot_value(sl, row).unwrap_or(f64::NAN),
-                        )
-                    })
+                    .map(|&sl| (plan.slots[sl].name.clone(), self.slot_value(sl, row).unwrap_or(f64::NAN)))
                     .collect()
             })
             .unwrap_or_default();
         let outputs = brain
-            .map(|b| {
-                b.outputs
-                    .iter()
-                    .map(|&sl| self.slot_value(sl, row).unwrap_or(f64::NAN))
-                    .collect()
-            })
+            .map(|b| b.outputs.iter().map(|&sl| self.slot_value(sl, row).unwrap_or(f64::NAN)).collect())
             .unwrap_or_default();
         let mut processes = vec![];
         for (ei, eff) in plan.effects.iter().enumerate() {
@@ -347,10 +295,7 @@ impl World {
         }
         let (attempted_speed, actual_speed) = match last.active.wiring.moves[arch] {
             Some((_, speed)) => {
-                let actual = self
-                    .slot_value(speed, row)
-                    .unwrap_or(0.0)
-                    .clamp(0.0, a.max_speed);
+                let actual = self.slot_value(speed, row).unwrap_or(0.0).clamp(0.0, a.max_speed);
                 let attempted = plan
                     .source_map
                     .iter()

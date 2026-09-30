@@ -21,15 +21,7 @@ pub fn value_noise(seed: u64, stream: u64, x: f64, z: f64, feature: f64) -> f64 
     let (i, j) = (u.floor(), v.floor());
     let (fu, fv) = (u - i, v - j);
     let s = |t: f64| t * t * (3.0 - 2.0 * t);
-    let h = |a: f64, b: f64| {
-        rng::draw(
-            seed,
-            0,
-            stream,
-            ((a as i64 as u64) << 32) ^ (b as i64 as u64 & 0xFFFF_FFFF),
-            0,
-        )
-    };
+    let h = |a: f64, b: f64| rng::draw(seed, 0, stream, ((a as i64 as u64) << 32) ^ (b as i64 as u64 & 0xFFFF_FFFF), 0);
     let (a, b, c, d) = (h(i, j), h(i + 1.0, j), h(i, j + 1.0), h(i + 1.0, j + 1.0));
     let (su, sv) = (s(fu), s(fv));
     let top = a + (b - a) * su;
@@ -54,11 +46,7 @@ pub fn terrain(decl: &TerrainDecl, grid: &Grid, seed: u64) -> Result<Vec<f64>, S
         TerrainDecl::Flat { elevation } => vec![*elevation; w * h],
         TerrainDecl::Explicit { values } => {
             if values.len() != w * h {
-                return Err(format!(
-                    "explicit terrain has {} values, grid has {}",
-                    values.len(),
-                    w * h
-                ));
+                return Err(format!("explicit terrain has {} values, grid has {}", values.len(), w * h));
             }
             values.clone()
         }
@@ -81,8 +69,7 @@ pub fn terrain(decl: &TerrainDecl, grid: &Grid, seed: u64) -> Result<Vec<f64>, S
                     let (bx, bz) = ((xn - 0.5) / 0.22, (zn - 0.8) / 0.14);
                     let basin = basin_depth * (-(bx * bx + bz * bz)).exp();
                     let ridge = 0.25 * relief * (xn - 0.5).abs().powf(1.5);
-                    let noise =
-                        roughness * (fbm(seed, STREAM_TERRAIN, x as f64, z as f64, 24.0, 4) - 0.5);
+                    let noise = roughness * (fbm(seed, STREAM_TERRAIN, x as f64, z as f64, 24.0, 4) - 0.5);
                     e[z * w + x] = slope + ridge - valley - basin + noise;
                 }
             }
@@ -111,12 +98,7 @@ pub fn shape_mask(shape: &RegionShape, grid: &Grid) -> Result<Vec<f64>, String> 
                 }
             }
         }
-        RegionShape::Circle {
-            cx,
-            cz,
-            radius,
-            feather,
-        } => {
+        RegionShape::Circle { cx, cz, radius, feather } => {
             for z in 0..h {
                 for x in 0..w {
                     let d = ((x as f64 + 0.5 - cx).powi(2) + (z as f64 + 0.5 - cz).powi(2)).sqrt();
@@ -139,11 +121,7 @@ pub fn shape_mask(shape: &RegionShape, grid: &Grid) -> Result<Vec<f64>, String> 
         }
         RegionShape::Explicit { values } => {
             if values.len() != w * h {
-                return Err(format!(
-                    "explicit region has {} values, grid has {}",
-                    values.len(),
-                    w * h
-                ));
+                return Err(format!("explicit region has {} values, grid has {}", values.len(), w * h));
             }
             m = values.clone();
         }
@@ -169,45 +147,22 @@ pub fn init_field(
         InitSpec::Constant { value } => vec![*value; n],
         InitSpec::Elevation { a, b } => en.iter().map(|e| a + b * e).collect(),
         InitSpec::Noise { lo, hi, feature } => (0..n)
-            .map(|c| {
-                lo + (hi - lo)
-                    * fbm(
-                        seed,
-                        stream,
-                        (c % grid.width) as f64,
-                        (c / grid.width) as f64,
-                        feature.max(1.0),
-                        3,
-                    )
-            })
+            .map(|c| lo + (hi - lo) * fbm(seed, stream, (c % grid.width) as f64, (c / grid.width) as f64, feature.max(1.0), 3))
             .collect(),
-        InitSpec::FillToLevel {
-            level,
-            density,
-            max_depth,
-        } => elevation
+        InitSpec::FillToLevel { level, density, max_depth } => elevation
             .iter()
             .map(|e| (level - e).clamp(0.0, *max_depth) * density * grid.cell_area())
             .collect(),
         InitSpec::Explicit { values } => {
             if values.len() != n {
-                return Err(format!(
-                    "explicit init for {field} has {} values, grid has {n}",
-                    values.len()
-                ));
+                return Err(format!("explicit init for {field} has {} values, grid has {n}", values.len()));
             }
             values.clone()
         }
         InitSpec::ScaleOf { .. } => unreachable!("resolved in init_cells"),
-        InitSpec::Region {
-            region,
-            inside,
-            outside,
-        } => {
+        InitSpec::Region { region, inside, outside } => {
             let Some((_, m)) = regions.iter().find(|(r, _)| r == region) else {
-                return Err(format!(
-                    "init for {field} references unknown region {region}"
-                ));
+                return Err(format!("init for {field} references unknown region {region}"));
             };
             m.iter().map(|c| outside + (inside - outside) * c).collect()
         }
@@ -215,33 +170,17 @@ pub fn init_field(
 }
 
 /// Initialize all cell fields from defaults, terrain, and scenario init specs.
-pub fn init_cells(
-    schema: &Schema,
-    sc: &Scenario,
-    grid: &Grid,
-    regions: &[(String, Vec<f64>)],
-) -> Result<Vec<Vec<f64>>, String> {
+pub fn init_cells(schema: &Schema, sc: &Scenario, grid: &Grid, regions: &[(String, Vec<f64>)]) -> Result<Vec<Vec<f64>>, String> {
     let n = grid.cells();
-    let mut cells: Vec<Vec<f64>> = schema
-        .cell_fields
-        .iter()
-        .map(|f| vec![f.default; n])
-        .collect();
+    let mut cells: Vec<Vec<f64>> = schema.cell_fields.iter().map(|f| vec![f.default; n]).collect();
     let Some(ei) = schema.cell_field(ELEVATION_FIELD) else {
-        return Err(format!(
-            "packages must declare a parameter field '{ELEVATION_FIELD}'"
-        ));
+        return Err(format!("packages must declare a parameter field '{ELEVATION_FIELD}'"));
     };
     if schema.cell_fields[ei].policy != FieldPolicy::Parameter {
-        return Err(format!(
-            "'{ELEVATION_FIELD}' must be a parameter field (immutable during ticks)"
-        ));
+        return Err(format!("'{ELEVATION_FIELD}' must be a parameter field (immutable during ticks)"));
     }
     cells[ei] = terrain(&sc.terrain, grid, sc.seed)?;
-    let (derived, direct): (Vec<_>, Vec<_>) = sc
-        .initial
-        .iter()
-        .partition(|(_, s)| matches!(s, InitSpec::ScaleOf { .. }));
+    let (derived, direct): (Vec<_>, Vec<_>) = sc.initial.iter().partition(|(_, s)| matches!(s, InitSpec::ScaleOf { .. }));
     for (field, spec) in direct.into_iter().chain(derived) {
         let Some(fi) = schema.cell_field(field) else {
             return Err(format!("scenario initializes unknown field {field}"));
@@ -255,9 +194,7 @@ pub fn init_cells(
                     return Err(format!("init for {field} scales unknown field {src}"));
                 };
                 if matches!(sc.initial.get(src), Some(InitSpec::ScaleOf { .. })) {
-                    return Err(format!(
-                        "init for {field} cannot scale another derived field"
-                    ));
+                    return Err(format!("init for {field} cannot scale another derived field"));
                 }
                 cells[si].iter().map(|x| x * factor).collect()
             }
@@ -266,19 +203,14 @@ pub fn init_cells(
         if v.iter().any(|x| !x.is_finite()) {
             return Err(format!("initial values of {field} are not finite"));
         }
-        if matches!(schema.cell_fields[fi].policy, FieldPolicy::Reservoir { .. })
-            && v.iter().any(|x| *x < 0.0)
-        {
+        if matches!(schema.cell_fields[fi].policy, FieldPolicy::Reservoir { .. }) && v.iter().any(|x| *x < 0.0) {
             return Err(format!("initial inventory of {field} is negative"));
         }
         cells[fi] = v;
     }
     // Reservoirs start within capacity.
     for (fi, f) in schema.cell_fields.iter().enumerate() {
-        if let FieldPolicy::Reservoir {
-            capacity: Some(cf), ..
-        } = f.policy
-        {
+        if let FieldPolicy::Reservoir { capacity: Some(cf), .. } = f.policy {
             let cap = cells[cf].clone();
             for (v, c) in cells[fi].iter_mut().zip(cap) {
                 *v = v.min(c);
@@ -288,12 +220,7 @@ pub fn init_cells(
     Ok(cells)
 }
 
-pub fn authored_genome(
-    a: &ArchInfo,
-    links: &[(usize, usize, f64)],
-    bias: &[f64],
-    traits: &[f64],
-) -> Result<Vec<f64>, String> {
+pub fn authored_genome(a: &ArchInfo, links: &[(usize, usize, f64)], bias: &[f64], traits: &[f64]) -> Result<Vec<f64>, String> {
     let b = &a.brain;
     if links.len() > b.hidden {
         return Err(format!(
@@ -368,30 +295,18 @@ pub fn spawn(
             };
             let t = &a.traits[ti];
             if !(t.min..=t.max).contains(v) {
-                return Err(format!(
-                    "trait override {name} = {v} outside [{}, {}]",
-                    t.min, t.max
-                ));
+                return Err(format!("trait override {name} = {v} outside [{}, {}]", t.min, t.max));
             }
             genome[ti] = *v;
         }
         if authored {
-            genome = authored_genome(
-                a,
-                &decl.authored_links,
-                &decl.authored_bias,
-                &genome[..a.traits.len()],
-            )?;
+            genome = authored_genome(a, &decl.authored_links, &decl.authored_bias, &genome[..a.traits.len()])?;
         }
         if !biology::genome_valid(a, &genome) {
             return Err("seed genome violates declared bounds".into());
         }
         let heading = rng::draw(seed, tick, STREAM_PLACE, id, 2) * std::f64::consts::TAU;
-        let origin = origin_override.unwrap_or(if authored {
-            Origin::Authored
-        } else {
-            Origin::Random
-        });
+        let origin = origin_override.unwrap_or(if authored { Origin::Authored } else { Origin::Random });
         let lineage = Lineage {
             parent: 0,
             root: id,

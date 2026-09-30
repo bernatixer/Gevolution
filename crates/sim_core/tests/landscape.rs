@@ -8,8 +8,7 @@ use sim_core::{RunConfig, World};
 
 fn landscape(size: usize, edit: impl FnOnce(&mut sim_core::schema::Scenario)) -> World {
     let root = sim_core::assets::asset_root();
-    let (mut sc, pkgs) =
-        sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
+    let (mut sc, pkgs) = sim_core::assets::load_scenario(&root.join("scenarios/seasonal_river.json")).unwrap();
     sc.grid.width = size;
     sc.grid.height = size;
     sc.regions.clear();
@@ -36,8 +35,7 @@ fn m3_drought_and_rain_change_water_and_vegetation() {
         sample_interval: 0,
         ..RunConfig::default()
     };
-    let branch =
-        |w: &World| sim_core::persistence::load(&sim_core::persistence::save(w), cfg()).unwrap();
+    let branch = |w: &World| sim_core::persistence::load(&sim_core::persistence::save(w), cfg()).unwrap();
     let rain = |w: &mut World, v: f64| {
         w.submit(
             CommandKind::SetParam {
@@ -76,16 +74,10 @@ fn m3_plants_do_not_grow_from_missing_inputs() {
             sc.weather.signals.get_mut("rain_flux").unwrap().mean = 0.0;
             sc.weather.signals.get_mut("rain_flux").unwrap().amplitude = 0.0;
             sc.weather.signals.get_mut("rain_flux").unwrap().noise = 0.0;
-            sc.initial
-                .insert("surface_water".into(), InitSpec::Constant { value: 0.0 });
-            sc.initial
-                .insert("groundwater".into(), InitSpec::Constant { value: 0.0 });
-            sc.initial.insert(
-                "vegetation_biomass".into(),
-                InitSpec::Constant { value: 500.0 },
-            );
-            sc.initial
-                .insert(missing.into(), InitSpec::Constant { value: 0.0 });
+            sc.initial.insert("surface_water".into(), InitSpec::Constant { value: 0.0 });
+            sc.initial.insert("groundwater".into(), InitSpec::Constant { value: 0.0 });
+            sc.initial.insert("vegetation_biomass".into(), InitSpec::Constant { value: 500.0 });
+            sc.initial.insert(missing.into(), InitSpec::Constant { value: 0.0 });
         });
         let e = w
             .plan()
@@ -121,25 +113,15 @@ fn m3_plants_do_not_grow_from_missing_inputs() {
 #[test]
 fn m3_extinct_vegetation_needs_a_propagule_source() {
     let mut w = landscape(24, |sc| {
-        sc.initial.insert(
-            "vegetation_biomass".into(),
-            InitSpec::Constant { value: 0.0 },
-        );
+        sc.initial.insert("vegetation_biomass".into(), InitSpec::Constant { value: 0.0 });
     });
     w.run(2000).unwrap();
-    assert_eq!(
-        total(&w, "vegetation_biomass"),
-        0.0,
-        "nothing regrows from nothing"
-    );
+    assert_eq!(total(&w, "vegetation_biomass"), 0.0, "nothing regrows from nothing");
     // A single explicit propagule spreads through funded dispersal.
     w.submit(
         CommandKind::AddResource {
             field: "vegetation_biomass".into(),
-            shape: serde_json::from_value(
-                json!({ "kind": "rect", "x0": 12, "z0": 12, "x1": 13, "z1": 13 }),
-            )
-            .unwrap(),
+            shape: serde_json::from_value(json!({ "kind": "rect", "x0": 12, "z0": 12, "x1": 13, "z1": 13 })).unwrap(),
             amount: 200.0,
         },
         None,
@@ -147,10 +129,7 @@ fn m3_extinct_vegetation_needs_a_propagule_source() {
     w.run(2000).unwrap();
     let v = &w.state.cells[w.schema().cell_field("vegetation_biomass").unwrap()];
     let colonized = v.iter().filter(|x| **x > 0.0).count();
-    assert!(
-        colonized > 1,
-        "vegetation spreads from the seeded cell ({colonized} cells)"
-    );
+    assert!(colonized > 1, "vegetation spreads from the seeded cell ({colonized} cells)");
     let biomass = w.schema().resource("biomass").unwrap();
     assert!(
         w.state.intervention_in[biomass] == 200.0,

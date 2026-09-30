@@ -17,21 +17,9 @@ impl Dom {
     pub fn describe(&self, grids: &[String], archetypes: &[String]) -> String {
         match self {
             Dom::Uniform => "uniform".into(),
-            Dom::Cells(g) => format!(
-                "cells<{}>",
-                grids.get(*g as usize).map(|s| s.as_str()).unwrap_or("?")
-            ),
-            Dom::Edges(g) => format!(
-                "edges<{}>",
-                grids.get(*g as usize).map(|s| s.as_str()).unwrap_or("?")
-            ),
-            Dom::Entities(a) => format!(
-                "entities<{}>",
-                archetypes
-                    .get(*a as usize)
-                    .map(|s| s.as_str())
-                    .unwrap_or("?")
-            ),
+            Dom::Cells(g) => format!("cells<{}>", grids.get(*g as usize).map(|s| s.as_str()).unwrap_or("?")),
+            Dom::Edges(g) => format!("edges<{}>", grids.get(*g as usize).map(|s| s.as_str()).unwrap_or("?")),
+            Dom::Entities(a) => format!("entities<{}>", archetypes.get(*a as usize).map(|s| s.as_str()).unwrap_or("?")),
         }
     }
 }
@@ -65,21 +53,13 @@ impl Type {
             Kind::Number => "",
             Kind::Bool => "bool ",
         };
-        let q = self
-            .quantity
-            .as_deref()
-            .map(|q| format!(" {q}"))
-            .unwrap_or_default();
+        let q = self.quantity.as_deref().map(|q| format!(" {q}")).unwrap_or_default();
         let st = match self.stage {
             Stage::Snapshot => "snapshot",
             Stage::Receipt => "receipt",
             Stage::Candidate => "candidate",
         };
-        format!(
-            "{k}[{}]{q} @{} ({st})",
-            self.unit,
-            self.dom.describe(grids, archetypes)
-        )
+        format!("{k}[{}]{q} @{} ({st})", self.unit, self.dom.describe(grids, archetypes))
     }
 }
 

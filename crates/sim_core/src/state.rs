@@ -63,21 +63,8 @@ impl Entities {
         &self.genome[i * self.genome_len..(i + 1) * self.genome_len]
     }
     #[allow(clippy::too_many_arguments)]
-    pub fn push(
-        &mut self,
-        id: u64,
-        x: f64,
-        z: f64,
-        heading: f64,
-        fields: &[f64],
-        genome: &[f64],
-        lineage: Lineage,
-        cooldown: f64,
-    ) {
-        debug_assert!(
-            self.ids.last().is_none_or(|&l| l < id),
-            "entity ids must stay sorted"
-        );
+    pub fn push(&mut self, id: u64, x: f64, z: f64, heading: f64, fields: &[f64], genome: &[f64], lineage: Lineage, cooldown: f64) {
+        debug_assert!(self.ids.last().is_none_or(|&l| l < id), "entity ids must stay sorted");
         self.ids.push(id);
         self.x.push(x);
         self.z.push(z);
@@ -173,20 +160,10 @@ impl State {
                 h.write_f64(*v);
             }
         }
-        for v in self
-            .params
-            .iter()
-            .chain(&self.account_in)
-            .chain(&self.account_out)
-        {
+        for v in self.params.iter().chain(&self.account_in).chain(&self.account_out) {
             h.write_f64(*v);
         }
-        for v in self
-            .intervention_in
-            .iter()
-            .chain(&self.intervention_out)
-            .chain(&self.roundoff)
-        {
+        for v in self.intervention_in.iter().chain(&self.intervention_out).chain(&self.roundoff) {
             h.write_f64(*v);
         }
         h.write_u64(self.next_entity_id);
