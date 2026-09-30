@@ -1,0 +1,11 @@
+{
+  "name": "tiny-reference",
+  "scenario": "scenarios/seasonal_river.json",
+  "size": 32,
+  "organisms": 50,
+  "seed": 20260929,
+  "warmup_ticks": 100,
+  "measured_ticks": 1000,
+  "population_cap": 10000,
+  "check_targets": false
+}

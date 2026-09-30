@@ -132,6 +132,8 @@ pub struct Snapshot {
     pub pending: usize,
     pub plan: Arc<PlanInfo>,
     pub cell: Option<CellExplanation>,
+    /// Bounded recent history of the selected cell value: (time, value, accepted in, accepted out).
+    pub cell_history: Vec<(f64, f64, f64, f64)>,
     pub entity: Option<EntityExplanation>,
     pub speed: Speed,
     pub ticks_per_second: f64,
@@ -180,6 +182,7 @@ struct Worker {
     current: usize,
     message: Option<String>,
     tick_times: VecDeque<Instant>,
+    cell_history: VecDeque<(f64, f64, f64, f64)>,
 }
 
 pub fn spawn(scenario: Scenario, packages: Vec<Package>) -> Result<SimHandle, String> {
@@ -318,6 +321,7 @@ impl Worker {
             current: 0,
             message: None,
             tick_times: VecDeque::new(),
+            cell_history: VecDeque::new(),
         }
     }
 
@@ -379,7 +383,10 @@ impl Worker {
             ToSim::Submit(c) => {
                 self.world.submit(c, None);
             }
-            ToSim::SelectCell(c, f) => self.selected_cell = c.map(|c| (c, f)),
+            ToSim::SelectCell(c, f) => {
+                self.selected_cell = c.map(|c| (c, f));
+                self.cell_history.clear();
+            }
             ToSim::SelectEntity(e) => self.selected_entity = e,
             ToSim::WantFlow(b) => self.want_flow = b,
             ToSim::ClearFailure => self.world.clear_failure(),
@@ -486,6 +493,22 @@ impl Worker {
     fn tick_once(&mut self) -> Result<(), ()> {
         let before = self.world.plan().source_hash;
         let r = self.world.step();
+        if r.is_ok()
+            && let Some((c, f)) = &self.selected_cell
+            && let Some(e) = self.world.explain_cell(f, *c)
+        {
+            let (i, o) = e.contributions.iter().fold((0.0, 0.0), |(i, o), k| {
+                if k.accepted >= 0.0 {
+                    (i + k.accepted, o)
+                } else {
+                    (i, o - k.accepted)
+                }
+            });
+            self.cell_history.push_back((self.world.time(), e.current, i, o));
+            while self.cell_history.len() > 480 {
+                self.cell_history.pop_front();
+            }
+        }
         if r.is_ok() {
             self.tick_times.push_back(Instant::now());
             while self.tick_times.len() > 200 {
@@ -577,6 +600,7 @@ impl Worker {
             pending: w.pending.len(),
             plan: self.plan_info.clone(),
             cell: self.selected_cell.as_ref().and_then(|(c, f)| w.explain_cell(f, *c)),
+            cell_history: self.cell_history.iter().copied().collect(),
             entity: self.selected_entity.and_then(|(a, id)| w.explain_entity(a, id)),
             speed: self.speed,
             ticks_per_second: tps,

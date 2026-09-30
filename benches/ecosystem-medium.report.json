@@ -1,0 +1,34 @@
+{
+  "accepted_process_elements_per_s": 132748268.07976086,
+  "build": "sim_core-0.1.0/phases.v1/strict-reference.f64.v1/splitmix64-keyed.v1/proportional-conservative.v1/aarch64-macos",
+  "compile_ms": 2.703875,
+  "final_organisms": 2496,
+  "grid": [
+    256,
+    256
+  ],
+  "hardware": "Apple M5 Pro, 18 logical cores, 64 GiB",
+  "hot_swap_tick_ms": 22.653084,
+  "initial_organisms": 2000,
+  "manifest": "ecosystem-medium",
+  "mean_ms": {
+    "brain": 0.4953662470000002,
+    "evaluation": 3.1709733360000047,
+    "resolution": 3.8873238399999956,
+    "snapshot": 0.13607374299999994
+  },
+  "measured_ticks": 1000,
+  "package_hash": "f8f33ab58f7f4425",
+  "peak_resident_mib": 452.4375,
+  "plan_instructions": 344,
+  "seed": 20260929,
+  "state_hash": "3d75255474d6ed7a",
+  "threads": "all",
+  "tick_ms": {
+    "max": 44.204125,
+    "median": 9.24525,
+    "p95": 10.849499999999999
+  },
+  "warmup_ticks": 100,
+  "world_init_ms": 15.276708
+}

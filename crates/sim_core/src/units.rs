@@ -16,6 +16,18 @@ pub struct Unit {
     pub absolute: bool,
 }
 
+/// Largest permitted |exponent| of any base dimension.
+pub const MAX_EXPONENT: i8 = 8;
+
+fn combine(a: &Unit, b: &Unit, sign: i8) -> Result<Unit, String> {
+    let f = |x: i8, y: i8| {
+        x.checked_add(y * sign)
+            .filter(|v| v.abs() <= MAX_EXPONENT)
+            .ok_or_else(|| format!("unit exponent out of range (|e| <= {MAX_EXPONENT})"))
+    };
+    Ok(Unit::new(f(a.kg, b.kg)?, f(a.m, b.m)?, f(a.s, b.s)?, f(a.k, b.k)?))
+}
+
 pub const DIMENSIONLESS: Unit = Unit {
     kg: 0,
     m: 0,
@@ -54,19 +66,24 @@ impl Unit {
         if self.absolute || o.absolute {
             return Err("absolute temperature cannot be multiplied or divided; subtract a reference temperature first".into());
         }
-        Ok(Unit::new(self.kg + o.kg, self.m + o.m, self.s + o.s, self.k + o.k))
+        combine(self, o, 1)
     }
     pub fn div(&self, o: &Unit) -> Result<Unit, String> {
         if self.absolute || o.absolute {
             return Err("absolute temperature cannot be multiplied or divided; subtract a reference temperature first".into());
         }
-        Ok(Unit::new(self.kg - o.kg, self.m - o.m, self.s - o.s, self.k - o.k))
+        combine(self, o, -1)
     }
     pub fn powi(&self, n: i8) -> Result<Unit, String> {
         if self.absolute {
             return Err("absolute temperature cannot be raised to a power".into());
         }
-        Ok(Unit::new(self.kg * n, self.m * n, self.s * n, self.k * n))
+        let f = |e: i8| {
+            e.checked_mul(n)
+                .filter(|v| v.abs() <= MAX_EXPONENT)
+                .ok_or_else(|| format!("unit exponent out of range (|e| <= {MAX_EXPONENT})"))
+        };
+        Ok(Unit::new(f(self.kg)?, f(self.m)?, f(self.s)?, f(self.k)?))
     }
     /// Result of `a + b`.
     pub fn add(&self, o: &Unit) -> Result<Unit, String> {

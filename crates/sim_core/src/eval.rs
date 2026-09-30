@@ -88,11 +88,14 @@ pub fn dom_len(dom: Dom, grid: &Grid, state: &State) -> usize {
 #[derive(Default)]
 pub struct Buffers {
     pub slots: Vec<Vec<f64>>,
+    /// Wall-clock milliseconds spent in brain evaluation this tick (diagnostic only).
+    pub brain_ms: f64,
 }
 
 impl Buffers {
     /// Size every slot for its domain, reusing allocations across ticks.
     pub fn prepare(&mut self, plan: &Plan, grid: &Grid, state: &State) {
+        self.brain_ms = 0.0;
         self.slots.resize_with(plan.slots.len(), Vec::new);
         for (s, info) in plan.slots.iter().enumerate() {
             let n = dom_len(info.dom, grid, state);
@@ -190,8 +193,10 @@ pub fn eval_stage(inp: &EvalInputs, bufs: &mut Buffers, stage: Stage, mode: Mode
 fn eval_whole(inp: &EvalInputs, bufs: &mut Buffers, k: usize) {
     let ins = &inp.plan.instrs[k];
     if let Op::Brain(a) = ins.op {
+        let t0 = std::time::Instant::now();
         let mut outs: Vec<Vec<f64>> = ins.outputs.iter().map(|&s| std::mem::take(&mut bufs.slots[s])).collect();
         eval_brain(inp, &bufs.slots, a, &ins.inputs, &mut outs);
+        bufs.brain_ms += t0.elapsed().as_secs_f64() * 1e3;
         for (s, o) in ins.outputs.iter().zip(outs) {
             bufs.slots[*s] = o;
         }

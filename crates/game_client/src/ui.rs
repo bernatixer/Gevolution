@@ -860,6 +860,38 @@ fn inspector(ui: &mut Ui, s: &Snapshot, view: &mut ViewState, send: &dyn Fn(ToSi
             ui.end_row();
         });
     }
+    if s.cell_history.len() > 1 {
+        let h = &s.cell_history;
+        charts::line_chart(
+            ui,
+            &format!("{} at this cell, recent ticks", view.inspect_field),
+            &[Series {
+                label: "value",
+                color: PALETTE[0],
+                points: h.iter().map(|x| (x.0, x.1)).collect(),
+            }],
+            70.0,
+            false,
+        );
+        charts::line_chart(
+            ui,
+            "accepted in / out per tick",
+            &[
+                Series {
+                    label: "in",
+                    color: PALETTE[2],
+                    points: h.iter().map(|x| (x.0, x.2)).collect(),
+                },
+                Series {
+                    label: "out",
+                    color: PALETTE[4],
+                    points: h.iter().map(|x| (x.0, x.3)).collect(),
+                },
+            ],
+            70.0,
+            true,
+        );
+    }
     if let Some(o) = &s.entity {
         ui.separator();
         ui.horizontal(|ui| {

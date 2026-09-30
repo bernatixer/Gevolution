@@ -5,11 +5,12 @@
 
 use crate::sim::{Snapshot, ToSim};
 use bevy::prelude::Resource;
-use bevy_egui::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Ui, Vec2, pos2, vec2};
+use bevy_egui::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, Ui, pos2, vec2};
 use serde_json::{Value, json};
 use sim_core::catalog::{self, ArgKind, Inputs};
 use sim_core::commands::CommandKind;
 use sim_core::compiler::{self, Diagnostic, NodeTypes, Severity};
+use sim_core::graph_edit::{insert_blend, is_effect, rename_refs, set_input, sync_effects};
 use sim_core::schema::{DomainDecl, Node, Package, ParamDecl, Rule, Scope};
 use std::collections::{BTreeMap, HashMap};
 use std::time::Instant;
@@ -186,14 +187,6 @@ fn default_args(op: &str, s: &Snapshot) -> BTreeMap<String, Value> {
         m.insert("inputs".into(), Value::Array(p.iter().map(|_| json!("")).collect()));
     }
     m
-}
-
-fn is_effect(op: &str) -> bool {
-    catalog::info(op).is_some_and(|i| i.effect)
-}
-
-fn sync_effects(rule: &mut Rule) {
-    rule.effects = rule.nodes.iter().filter(|n| is_effect(&n.op)).map(|n| n.id.clone()).collect();
 }
 
 fn node_pos(n: &Node) -> Option<Pos2> {
@@ -1158,43 +1151,6 @@ fn wire(p: &egui::Painter, a: Pos2, b: Pos2, c: Color32) {
     ));
 }
 
-/// Set the k-th input row (positional ports first, then named references).
-fn set_input(n: &mut Node, k: usize, src: &str) {
-    let info = catalog::info(&n.op);
-    match info.map(|i| i.inputs) {
-        Some(Inputs::Positional(names)) if k < names.len() => {
-            let mut arr = n.args.get("inputs").and_then(|v| v.as_array().cloned()).unwrap_or_default();
-            arr.resize(names.len(), json!(""));
-            arr[k] = json!(src);
-            n.args.insert("inputs".into(), Value::Array(arr));
-        }
-        Some(Inputs::Named(names)) if k < names.len() => {
-            n.args.insert(names[k].to_string(), json!(src));
-        }
-        Some(Inputs::Variadic) => {
-            let mut arr = n.args.get("inputs").and_then(|v| v.as_array().cloned()).unwrap_or_default();
-            if k < arr.len() {
-                arr[k] = json!(src);
-            } else {
-                arr.push(json!(src));
-            }
-            n.args.insert("inputs".into(), Value::Array(arr));
-        }
-        _ => {
-            // Reaction/birth leg references: rows after the named ports.
-            if let Some(Value::Array(legs)) = n.args.get_mut("legs") {
-                let offset = k - info.map(|i| if let Inputs::Named(x) = i.inputs { x.len() } else { 0 }).unwrap_or(0);
-                if let Some(l) = legs.get_mut(offset)
-                    && let Some(o) = l.as_object_mut()
-                {
-                    let key = if o.contains_key("amount") { "amount" } else { "rate" };
-                    o.insert(key.into(), json!(src));
-                }
-            }
-        }
-    }
-}
-
 fn combo_str(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &mut String, options: &[String]) -> bool {
     let mut changed = false;
     egui::ComboBox::from_id_salt(id)
@@ -1700,111 +1656,3 @@ fn properties(ui: &mut Ui, ed: &mut EditorState, s: &Snapshot) {
         }
     }
 }
-
-fn rename_refs(args: &mut BTreeMap<String, Value>, from: &str, to: &str) {
-    fn fix(v: &mut Value, from: &str, to: &str) {
-        match v {
-            Value::String(s) => {
-                if s == from {
-                    *s = to.to_string();
-                } else if let Some(rest) = s.strip_prefix(&format!("{from}.")) {
-                    *s = format!("{to}.{rest}");
-                }
-            }
-            Value::Array(a) => a.iter_mut().for_each(|x| fix(x, from, to)),
-            Value::Object(o) => {
-                for (k, x) in o.iter_mut() {
-                    if matches!(k.as_str(), "rate" | "amount") {
-                        fix(x, from, to);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    for (k, v) in args.iter_mut() {
-        if matches!(
-            k.as_str(),
-            "inputs" | "rate" | "amount" | "value" | "turn" | "speed" | "condition" | "legs"
-        ) {
-            fix(v, from, to);
-        }
-    }
-}
-
-/// Rewire input `port` of node `ni` through `mul(original, lerp(1, factor, region))`.
-fn insert_blend(rule: &mut Rule, ni: usize, port: usize, region: &str) {
-    let node = rule.nodes[ni].clone();
-    let refs = catalog::node_refs(&node);
-    let names: Vec<String> = match catalog::info(&node.op).map(|i| i.inputs) {
-        Some(Inputs::Positional(n)) => n.iter().map(|s| s.to_string()).collect(),
-        Some(Inputs::Named(n)) => n.iter().map(|s| s.to_string()).collect(),
-        _ => return,
-    };
-    let Some(pname) = names.get(port) else { return };
-    let original = refs.iter().find(|r| &r.0 == pname).map(|r| r.1.clone()).unwrap_or_default();
-    let base = format!("{}_{}", node.id, region.replace('.', "_"));
-    let pname_param = format!("{}_factor", region.replace('.', "_"));
-    rule.parameters.entry(pname_param.clone()).or_insert(ParamDecl {
-        value: 0.3,
-        unit: "1".into(),
-        quantity: None,
-        min: 0.0,
-        max: 5.0,
-        label: format!("Multiplier inside region {region}"),
-        stability: None,
-    });
-    let p = node_pos(&node).unwrap_or(pos2(0.0, 0.0));
-    let at = |dx: f32, dy: f32| json!([p.x - 260.0 + dx, p.y + dy]);
-    let mk = |id: &str, op: &str, mut args: BTreeMap<String, Value>, pos: Value| {
-        args.insert("pos".into(), pos);
-        Node {
-            id: id.to_string(),
-            op: op.to_string(),
-            args,
-        }
-    };
-    let obj = |v: Value| -> BTreeMap<String, Value> { serde_json::from_value(v).unwrap() };
-    let new = vec![
-        mk(
-            &format!("{base}_mask"),
-            "region",
-            obj(json!({ "region": region })),
-            at(-230.0, 140.0),
-        ),
-        mk(
-            &format!("{base}_one"),
-            "const",
-            obj(json!({ "value": 1.0, "unit": "1" })),
-            at(-230.0, 200.0),
-        ),
-        mk(
-            &format!("{base}_factor"),
-            "parameter",
-            obj(json!({ "name": pname_param })),
-            at(-230.0, 260.0),
-        ),
-        mk(
-            &format!("{base}_blend"),
-            "lerp",
-            obj(json!({ "inputs": [format!("{base}_one"), format!("{base}_factor"), format!("{base}_mask")] })),
-            at(0.0, 180.0),
-        ),
-        mk(
-            &format!("{base}_scaled"),
-            "mul",
-            obj(json!({ "inputs": [original, format!("{base}_blend")] })),
-            at(0.0, 60.0),
-        ),
-    ];
-    for n in new {
-        if !rule.nodes.iter().any(|x| x.id == n.id) {
-            rule.nodes.push(n);
-        }
-    }
-    set_input(&mut rule.nodes[ni], port, &format!("{base}_scaled"));
-    sync_effects(rule);
-}
-
-#[allow(dead_code)]
-fn _size_hint(_: Vec2) {}

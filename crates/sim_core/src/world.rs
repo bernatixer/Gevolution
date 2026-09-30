@@ -170,6 +170,8 @@ pub struct PhaseTimings {
     pub validation: f64,
     pub commit: f64,
     pub total: f64,
+    /// Portion of evaluation spent in neural networks.
+    pub brain: f64,
 }
 
 /// Wiring of non-resource effects to state fields, in canonical order.
@@ -1069,6 +1071,7 @@ impl World {
             validation: ms(t_lifecycle, t_validate),
             commit: ms(t_validate, t_end),
             total: ms(t_start, t_end),
+            brain: self.bufs.brain_ms,
         };
         for (c, summary) in applied {
             self.push_event(EventKind::CommandApplied { seq: c.seq, summary });

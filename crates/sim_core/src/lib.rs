@@ -14,6 +14,7 @@ pub mod catalog;
 pub mod commands;
 pub mod compiler;
 pub mod eval;
+pub mod graph_edit;
 pub mod grid;
 pub mod inspect;
 pub mod ir;
