@@ -257,10 +257,42 @@ pub fn package_hash(packages: &[Package]) -> u64 {
 }
 
 pub fn compile(packages: &[Package], env: &CompileEnv) -> Result<Plan, Vec<Diagnostic>> {
+    compile_with_types(packages, env).0
+}
+
+/// Output port types per qualified node id, for editor feedback: (port, description).
+pub type NodeTypes = BTreeMap<String, Vec<(String, String)>>;
+
+/// Compile, also returning the types of every node that resolved, even when
+/// other nodes have errors (so the editor can label ports of a broken draft).
+pub fn compile_with_types(packages: &[Package], env: &CompileEnv) -> (Result<Plan, Vec<Diagnostic>>, NodeTypes) {
     let mut sorted: Vec<&Package> = packages.iter().collect();
     sorted.sort_by(|a, b| a.package_id.cmp(&b.package_id));
     let mut c = Compiler::new(sorted, env);
     c.run();
+    let mut types = NodeTypes::new();
+    let an = c.schema.arch_names();
+    for (k, outs) in &c.outputs {
+        let ports: Vec<(String, String)> = if c.effect_of.contains_key(k) {
+            vec![("effect".into(), "effect (receipts: accepted, accepted_rate, fraction)".into())]
+        } else {
+            outs.iter()
+                .enumerate()
+                .filter(|(_, s)| **s < c.types.len())
+                .map(|(i, s)| {
+                    (
+                        if outs.len() == 1 { "value".to_string() } else { format!("out{i}") },
+                        c.types[*s].describe(&c.schema.grids, &an),
+                    )
+                })
+                .collect()
+        };
+        types.insert(k.clone(), ports);
+    }
+    (finish(c, packages), types)
+}
+
+fn finish(c: Compiler, packages: &[Package]) -> Result<Plan, Vec<Diagnostic>> {
     let errors: Vec<Diagnostic> = c.diags.iter().filter(|d| d.severity == Severity::Error).cloned().collect();
     if !errors.is_empty() {
         return Err(errors);

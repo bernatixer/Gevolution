@@ -61,16 +61,18 @@ pub fn terrain(decl: &TerrainDecl, grid: &Grid, seed: u64) -> Result<Vec<f64>, S
             for z in 0..h {
                 for x in 0..w {
                     let (xn, zn) = (x as f64 / wf, z as f64 / hf);
-                    // Uplands at low z sloping down toward a basin near high z.
-                    let slope = relief * (1.0 - zn).powf(1.4);
-                    let center = 0.5 + 0.12 * (zn * 7.0).sin() * (1.0 - zn * 0.6);
-                    let d = (xn - center) / 0.13;
-                    let valley = valley_depth * (-d * d).exp() * (1.0 - 0.5 * zn);
-                    let (bx, bz) = ((xn - 0.5) / 0.22, (zn - 0.8) / 0.14);
+                    // Uplands at low z sloping toward a basin near high z.
+                    let slope = relief * (1.0 - zn).powf(1.3);
+                    // Meandering valley line; hillsides fall toward it so water drains laterally.
+                    let center = 0.5 + 0.13 * (zn * 6.5).sin() * (1.0 - zn * 0.7);
+                    let dist = (xn - center).abs();
+                    let sides = 0.45 * relief * dist.powf(1.2);
+                    let d = dist / 0.035;
+                    let channel = valley_depth * (-d * d).exp() * (1.0 - 0.4 * zn);
+                    let (bx, bz) = ((xn - 0.5) / 0.2, (zn - 0.82) / 0.12);
                     let basin = basin_depth * (-(bx * bx + bz * bz)).exp();
-                    let ridge = 0.25 * relief * (xn - 0.5).abs().powf(1.5);
                     let noise = roughness * (fbm(seed, STREAM_TERRAIN, x as f64, z as f64, 24.0, 4) - 0.5);
-                    e[z * w + x] = slope + ridge - valley - basin + noise;
+                    e[z * w + x] = slope + sides - channel - basin + noise;
                 }
             }
             let min = e.iter().cloned().fold(f64::INFINITY, f64::min);

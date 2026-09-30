@@ -6,3 +6,6 @@ license.workspace = true
 
 [dependencies]
 sim_core = { path = "../sim_core" }
+bevy = { version = "0.19.1", default-features = false, features = ["std", "bevy_winit", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_window", "bevy_asset", "bevy_log", "multi_threaded", "tonemapping_luts", "default_font", "bevy_gizmos", "png", "bevy_picking"] }
+bevy_egui = "0.42.0"
+serde_json.workspace = true

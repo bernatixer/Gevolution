@@ -10,6 +10,7 @@
 
 pub mod assets;
 pub mod biology;
+pub mod catalog;
 pub mod commands;
 pub mod compiler;
 pub mod eval;
