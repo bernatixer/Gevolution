@@ -22,7 +22,7 @@ The first client build compiles Bevy, which takes a few minutes.
 
 The world fills the window, and a light HUD floats over it.
 
-- **Top left:** animals, plant cover and open water at a glance. Click a number to show or hide the Overview.
+- **Top left:** animals, plant cover and open water at a glance.
 - **Top centre:** the clock and play speed.
 - **Top right:** the 📊 Overview and 📜 Laws windows, the 3D and Map views, and ⚙ *Under the hood*.
   - *Under the hood* covers resource budgets, inputs and outputs, events and performance.
@@ -35,7 +35,7 @@ The world fills the window, and a light HUD floats over it.
   - An animal shows its health, energy, water and inherited traits.
 
 The world's look follows the simulation:
-- The ground blends grass, straw, soil, forest floor, mud and rock according to moisture, plant cover, slope and water.
+- The ground blends grass, straw, soil, forest floor, mud and rock according to moisture, plant cover, slope and water. Meadow patches break it up, and as the soil dries the weaker patches turn to straw first.
 - Each spot grows the plant that fits it:
   - forests where biomass is high;
   - pines up high and in the cold;

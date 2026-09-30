@@ -73,16 +73,14 @@ fn fmt(v: f64) -> String {
     }
 }
 
-fn card<R>(ui: &mut Ui, p: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R {
-    egui::Frame::new()
-        .fill(p.card)
-        .corner_radius(CornerRadius::same(12))
-        .inner_margin(egui::Margin::same(12))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            add(ui)
-        })
-        .inner
+/// A section of a window: no box, just a thin rule between sections.
+fn card<R>(ui: &mut Ui, _p: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R {
+    if ui.min_rect().height() > 1.0 {
+        ui.add_space(6.0);
+        ui.separator();
+        ui.add_space(6.0);
+    }
+    add(ui)
 }
 
 /// A pill-shaped toggle button.
@@ -108,9 +106,8 @@ fn hud(p: &Palette) -> egui::Frame {
         .shadow(egui::Shadow { offset: [0, 3], blur: 12, spread: 0, color: Color32::from_black_alpha(30) })
 }
 
-fn chip(ui: &mut Ui, color: Color32, value: String, tip: &str) -> egui::Response {
-    let b = egui::Button::new(RichText::new(value).size(15.0).strong().color(color)).frame(false);
-    ui.add(b).on_hover_text(tip)
+fn chip(ui: &mut Ui, color: Color32, value: String, tip: &str) {
+    ui.label(RichText::new(value).size(15.0).strong().color(color)).on_hover_text(tip);
 }
 
 pub fn ui_system(
@@ -155,9 +152,8 @@ pub fn ui_system(
                     (p.water, format!("💧 {} m³", human(total("surface_water") / 1000.0)), "Open water in lakes and rivers"),
                 ];
                 for (c, v, tip) in chips {
-                    if chip(ui, c, v, &format!("{tip}. Click for trends.")).clicked() {
-                        uis.overview_open = !uis.overview_open;
-                    }
+                    ui.add_space(4.0);
+                    chip(ui, c, v, tip);
                 }
             });
         });
@@ -231,42 +227,45 @@ pub fn ui_system(
         Tool::AddWater => Some("Hold the mouse on the land to pour water".into()),
         Tool::SpawnOrganisms => Some("Click the land to release a small herd".into()),
     };
+    const DOCK_H: f32 = 58.0;
+    if let Some(h) = hint {
+        egui::Area::new("tool_hint".into())
+            .pivot(egui::Align2::CENTER_BOTTOM)
+            .fixed_pos(egui::pos2(screen.center().x, screen.max.y - 16.0 - DOCK_H - 8.0))
+            .show(&ctx, |ui| {
+                hud(&p).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(h).color(p.text));
+                        if paused {
+                            let b = egui::Button::new(RichText::new("▶ Play").color(p.on_accent)).fill(p.accent).corner_radius(CornerRadius::same(14));
+                            if ui.add(b).clicked() {
+                                send(ToSim::Speed(Speed::X1));
+                            }
+                        }
+                    });
+                });
+            });
+    }
     egui::Area::new("dock".into())
         .pivot(egui::Align2::CENTER_BOTTOM)
         .fixed_pos(egui::pos2(screen.center().x, screen.max.y - 16.0))
         .show(&ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                if let Some(h) = hint {
-                    hud(&p).show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new(h).color(p.text));
-                            if paused {
-                                let b = egui::Button::new(RichText::new("▶ Play").color(p.on_accent)).fill(p.accent).corner_radius(CornerRadius::same(14));
-                                if ui.add(b).clicked() {
-                                    send(ToSim::Speed(Speed::X1));
-                                }
-                            }
-                        });
-                    });
-                    ui.add_space(6.0);
-                }
-                hud(&p).corner_radius(CornerRadius::same(24)).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        for (t, label, tip) in [
-                            (Tool::Inspect, "🔍  Look", "Click the land or an animal to see what is happening there"),
-                            (Tool::AddWater, "💧  Water", "Hold the mouse on the land to pour water"),
-                            (Tool::SpawnOrganisms, "🐾  Animals", "Click the land to release a small herd"),
-                        ] {
-                            let on = view.tool == t;
-                            let b = egui::Button::new(RichText::new(label).size(16.0).color(if on { p.on_accent } else { p.text }))
-                                .fill(if on { p.accent } else { p.soft })
-                                .corner_radius(CornerRadius::same(18))
-                                .min_size(egui::vec2(112.0, 40.0));
-                            if ui.add(b).on_hover_text(tip).clicked() {
-                                view.tool = t;
-                            }
+            hud(&p).corner_radius(CornerRadius::same(24)).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    for (t, label, tip) in [
+                        (Tool::Inspect, "🔍  Look", "Click the land or an animal to see what is happening there"),
+                        (Tool::AddWater, "💧  Water", "Hold the mouse on the land to pour water"),
+                        (Tool::SpawnOrganisms, "🐾  Animals", "Click the land to release a small herd"),
+                    ] {
+                        let on = view.tool == t;
+                        let b = egui::Button::new(RichText::new(label).size(16.0).color(if on { p.on_accent } else { p.text }))
+                            .fill(if on { p.accent } else { p.soft })
+                            .corner_radius(CornerRadius::same(18))
+                            .min_size(egui::vec2(112.0, 40.0));
+                        if ui.add(b).on_hover_text(tip).clicked() {
+                            view.tool = t;
                         }
-                    });
+                    }
                 });
             });
         });
