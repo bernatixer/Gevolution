@@ -497,7 +497,7 @@ impl Worker {
         let r = self.world.step();
         if r.is_ok()
             && let Some((c, _)) = &self.selected_cell
-            && self.world.tick() % 4 == 0
+            && self.world.tick().is_multiple_of(4)
         {
             let w = &self.world;
             let s = w.schema();

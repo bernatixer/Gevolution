@@ -795,12 +795,12 @@ fn trim_num(v: f64) -> String {
     } else {
         format!("{v:.4}")
     };
-    let s = if s.contains('.') {
+    
+    if s.contains('.') {
         s.trim_end_matches('0').trim_end_matches('.').to_string()
     } else {
         s
-    };
-    s
+    }
 }
 
 fn place(ep: &str, s: &Snapshot) -> String {
