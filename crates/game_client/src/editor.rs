@@ -1417,12 +1417,10 @@ fn properties(ui: &mut Ui, ed: &mut EditorState, s: &Snapshot) {
     // Scalar and structured args.
     let fields = |entity: bool| -> Vec<String> {
         let mut v: Vec<String> = s.plan.cell_fields.iter().map(|f| f.0.clone()).collect();
-        if entity {
-            if let Some(a) = rule.domain.archetype.as_ref() {
-                for p in &s.plan.packages {
-                    for ar in p.archetypes.iter().filter(|x| &x.id == a) {
-                        v.extend(ar.fields.iter().map(|f| format!("self.{}", f.id)));
-                    }
+        if entity && let Some(a) = rule.domain.archetype.as_ref() {
+            for p in &s.plan.packages {
+                for ar in p.archetypes.iter().filter(|x| &x.id == a) {
+                    v.extend(ar.fields.iter().map(|f| format!("self.{}", f.id)));
                 }
             }
         }

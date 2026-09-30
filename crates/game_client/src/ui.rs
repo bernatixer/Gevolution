@@ -103,10 +103,10 @@ pub fn ui_system(
         egui::Window::new("Loading").show(&ctx, |ui| ui.label("Building the world…"));
         return Ok(());
     };
-    if view.region.is_empty() {
-        if let Some(r) = s.plan.regions.first() {
-            view.region = r.clone();
-        }
+    if view.region.is_empty()
+        && let Some(r) = s.plan.regions.first()
+    {
+        view.region = r.clone();
     }
     let tx = link.0.tx.clone();
     let send = |m: ToSim| {
@@ -775,11 +775,9 @@ fn guide_tab(ui: &mut Ui, s: &Snapshot, uis: &mut UiState, editor: &mut EditorSt
                                     view.region = "upstream".into();
                                 }
                             }
-                            3 => {
-                                if ui.button("Edit water balance").clicked() {
-                                    editor.open(s);
-                                    editor.select_rule("core.bio.water_balance");
-                                }
+                            3 if ui.button("Edit water balance").clicked() => {
+                                editor.open(s);
+                                editor.select_rule("core.bio.water_balance");
                             }
                             _ => {}
                         }

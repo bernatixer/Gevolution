@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
 //! Evolving Worlds desktop client: Bevy presentation over the headless sim_core runtime.
 
 mod charts;
@@ -50,6 +51,7 @@ pub struct Script {
     pub select_cell: Option<usize>,
     done: bool,
     started: bool,
+    frames: Vec<f32>,
 }
 
 fn run_script(
@@ -80,14 +82,13 @@ fn run_script(
         if script.view.as_deref() == Some("top") {
             view.mode = view::ViewMode::TopDown;
         }
-        if let Some(o) = &script.overlay {
-            if let Some(ov) = view::Overlay::ALL
+        if let Some(o) = &script.overlay
+            && let Some(ov) = view::Overlay::ALL
                 .iter()
                 .find(|x| x.label().to_lowercase().starts_with(&o.to_lowercase()))
-            {
-                view.overlay = *ov;
-                let _ = link.0.tx.send(sim::ToSim::WantFlow(*ov == view::Overlay::Flow));
-            }
+        {
+            view.overlay = *ov;
+            let _ = link.0.tx.send(sim::ToSim::WantFlow(*ov == view::Overlay::Flow));
         }
         uis.tab = match script.tab.as_deref() {
             Some("world") => ui::Tab::World,
@@ -111,7 +112,22 @@ fn run_script(
         }
     }
     let t = time.elapsed_secs();
+    if t > 2.0 && !script.done {
+        script.frames.push(time.delta_secs() * 1000.0);
+    }
     if !script.done && t > script.after {
+        let mut f = script.frames.clone();
+        f.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        if !f.is_empty() {
+            println!(
+                "frame time ms: median {:.2}, p95 {:.2} over {} frames (population {}, {:.1} sim ticks/s)",
+                f[f.len() / 2],
+                f[(f.len() - 1) * 95 / 100],
+                f.len(),
+                snap.population,
+                snap.ticks_per_second
+            );
+        }
         script.done = true;
         let path = script.screenshot.clone().unwrap();
         let shot = match &offscreen {

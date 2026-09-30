@@ -1,4 +1,5 @@
 //! M3 gates: a living landscape driven by laws, not biome switches.
+#![allow(clippy::needless_range_loop)]
 
 use serde_json::json;
 use sim_core::commands::CommandKind;

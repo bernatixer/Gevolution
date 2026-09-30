@@ -563,9 +563,9 @@ pub fn update_scene(
                         if wet { e + depth * vs + 0.3 } else { e - 2.0 },
                         (z as f32 + 0.5) * cs,
                     ]);
-                    let t = (depth / 2.0).clamp(0.0, 1.0);
-                    let rgb = lerp3([0.35, 0.60, 0.75], [0.06, 0.22, 0.45], t);
-                    col.push([rgb[0], rgb[1], rgb[2], if wet { 0.55 + 0.4 * t } else { 0.0 }]);
+                    let t = ((depth / 0.003).ln() / (1000.0f32).ln()).clamp(0.0, 1.0);
+                    let rgb = lerp3([0.22, 0.48, 0.72], [0.03, 0.14, 0.38], t);
+                    col.push([rgb[0], rgb[1], rgb[2], if wet { 0.72 + 0.26 * t } else { 0.0 }]);
                 }
             }
             m.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
@@ -849,14 +849,14 @@ pub fn pointer_tools(
             }
         }
         Tool::SpawnOrganisms => {
-            if buttons.just_pressed(MouseButton::Left) {
-                if let Some(a) = s.plan.archetypes.first() {
-                    let _ = link.0.tx.send(ToSim::Submit(CommandKind::SpawnOrganisms {
-                        archetype: a.0.clone(),
-                        shape: brush,
-                        count: view.spawn_count,
-                    }));
-                }
+            if buttons.just_pressed(MouseButton::Left)
+                && let Some(a) = s.plan.archetypes.first()
+            {
+                let _ = link.0.tx.send(ToSim::Submit(CommandKind::SpawnOrganisms {
+                    archetype: a.0.clone(),
+                    shape: brush,
+                    count: view.spawn_count,
+                }));
             }
         }
     }

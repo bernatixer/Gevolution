@@ -515,9 +515,10 @@ impl Worker {
                 self.tick_times.pop_front();
             }
         }
-        if self.world.plan().source_hash != before || self.world.plan().schema.regions.len() != self.plan_info.regions.len() {
-            self.plan_info = Arc::new(plan_info(&self.world));
-        } else if self.world.state.params != self.plan_info.params.iter().map(|p| p.value).collect::<Vec<_>>() {
+        let laws_changed = self.world.plan().source_hash != before
+            || self.world.plan().schema.regions.len() != self.plan_info.regions.len()
+            || self.world.state.params.iter().ne(self.plan_info.params.iter().map(|p| &p.value));
+        if laws_changed {
             self.plan_info = Arc::new(plan_info(&self.world));
         }
         if r.is_err() {

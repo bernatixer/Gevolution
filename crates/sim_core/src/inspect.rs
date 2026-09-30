@@ -42,10 +42,10 @@ pub struct CellExplanation {
 
 fn rule_label(w: &World, rule: &str) -> String {
     for p in &w.active.packages {
-        if let Some(r) = p.rules.iter().find(|r| r.rule_id == rule) {
-            if !r.label.is_empty() {
-                return r.label.clone();
-            }
+        if let Some(r) = p.rules.iter().find(|r| r.rule_id == rule)
+            && !r.label.is_empty()
+        {
+            return r.label.clone();
         }
     }
     rule.to_string()

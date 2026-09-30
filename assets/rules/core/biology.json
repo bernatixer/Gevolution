@@ -750,7 +750,7 @@
       },
       "parameters": {
         "basal_rate": {
-          "value": 150.0,
+          "value": 180.0,
           "unit": "W",
           "min": 0.0,
           "max": 100000.0,
@@ -1598,14 +1598,14 @@
           "label": "Damage when basal needs are unfunded"
         },
         "crowding_damage": {
-          "value": 0.05,
+          "value": 0.08,
           "unit": "1/s",
           "min": 0.0,
           "max": 1.0,
           "label": "Damage from local crowding (competition, disease)"
         },
         "crowding_tolerance": {
-          "value": 0.375,
+          "value": 0.25,
           "unit": "1",
           "min": 0.0,
           "max": 1.0,
