@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 sim_core = { path = "../sim_core" }
-bevy = { version = "0.19.1", default-features = false, features = ["std", "bevy_winit", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_window", "bevy_asset", "bevy_log", "multi_threaded", "tonemapping_luts", "default_font", "bevy_gizmos", "png", "bevy_picking"] }
+bevy = { version = "0.19.1", default-features = false, features = ["std", "bevy_winit", "bevy_render", "bevy_core_pipeline", "bevy_pbr", "bevy_window", "bevy_asset", "bevy_log", "multi_threaded", "tonemapping_luts", "default_font", "bevy_gizmos", "png", "jpeg", "bevy_picking", "bevy_gltf", "bevy_animation", "bevy_scene", "bevy_world_serialization", "gltf_animation", "reflect_auto_register"] }
 bevy_egui = "0.42.0"
 serde_json.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg"] }

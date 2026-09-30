@@ -271,13 +271,6 @@ pub fn ui_system(
 
     // Remaining area is the 3D viewport.
     let central = root.available_rect_before_wrap();
-    let sf = window.scale_factor();
-    view.viewport = Some((
-        (central.left() * sf) as u32,
-        (central.top() * sf) as u32,
-        (central.width() * sf) as u32,
-        (central.height() * sf) as u32,
-    ));
     let paused = s.speed == Speed::Paused;
     let hint: Option<String> = match view.tool {
         _ if paused && s.pending > 0 => Some(format!("{} change(s) waiting: they happen when the world runs", s.pending)),

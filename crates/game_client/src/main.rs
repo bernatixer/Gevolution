@@ -3,6 +3,9 @@
 
 mod charts;
 mod editor;
+mod fauna;
+mod flora;
+mod materials;
 mod sim;
 mod theme;
 mod ui;
@@ -46,7 +49,6 @@ pub struct Script {
     pub after: f32,
     pub speed: Option<String>,
     pub view: Option<String>,
-    pub overlay: Option<String>,
     pub tab: Option<String>,
     pub editor_rule: Option<String>,
     pub select_cell: Option<usize>,
@@ -83,14 +85,6 @@ fn run_script(
         let _ = link.0.tx.send(sim::ToSim::Speed(speed));
         if script.view.as_deref() == Some("top") {
             view.mode = view::ViewMode::TopDown;
-        }
-        if let Some(o) = &script.overlay
-            && let Some(ov) = view::Overlay::ALL
-                .iter()
-                .find(|x| x.label().to_lowercase().starts_with(&o.to_lowercase()))
-        {
-            view.overlay = *ov;
-            let _ = link.0.tx.send(sim::ToSim::WantFlow(*ov == view::Overlay::Flow));
         }
         uis.tab = if script.tab.as_deref() == Some("laws") {
             ui::Tab::Laws
@@ -160,7 +154,6 @@ fn main() {
             "--after" => script.after = next(&mut i).parse().unwrap_or(4.0),
             "--speed" => script.speed = Some(next(&mut i)),
             "--view" => script.view = Some(next(&mut i)),
-            "--overlay" => script.overlay = Some(next(&mut i)),
             "--tab" => script.tab = Some(next(&mut i)),
             "--editor" => script.editor_rule = Some(next(&mut i)),
             "--select" => script.select_cell = next(&mut i).parse().ok(),
@@ -189,7 +182,7 @@ fn main() {
         }
     };
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
+        .add_plugins(DefaultPlugins.set(bevy::asset::AssetPlugin { file_path: assets.to_string_lossy().to_string(), ..default() }).set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Gevolution".into(),
                 resolution: WindowResolution::new(1680, 1000),
@@ -199,6 +192,11 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .add_plugins(MaterialPlugin::<materials::TerrainMaterial>::default())
+        .add_plugins(MaterialPlugin::<materials::WaterMaterial>::default())
+        .init_resource::<flora::Flora>()
+        .init_resource::<fauna::Fauna>()
+        .add_observer(fauna::on_animal_ready)
         .insert_resource(SimLink(handle))
         .insert_resource(script)
         .insert_resource(ClientState { assets, ..default() })
@@ -207,12 +205,14 @@ fn main() {
         .init_resource::<editor::EditorState>()
         .init_resource::<ui::UiState>()
         .init_resource::<theme::ActiveTheme>()
-        .add_systems(Startup, view::setup)
+        .add_systems(Startup, (view::setup, fauna::setup_fauna))
         .add_systems(PreUpdate, pull_snapshot)
         .add_systems(
             Update,
             (
-                view::update_scene,
+                view::update_terrain,
+                flora::update_flora,
+                fauna::update_fauna,
                 view::camera_control,
                 view::pointer_tools,
                 view::gizmos,

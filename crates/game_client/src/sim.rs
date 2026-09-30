@@ -10,7 +10,7 @@ use sim_core::ir::{Dom, EffectKind};
 use sim_core::schema::{Package, Scenario};
 use sim_core::world::{Event, PhaseTimings, ResourceLedger, Sample, Stats, TickFailure};
 use sim_core::{RunConfig, World, persistence};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex};
@@ -52,6 +52,17 @@ pub struct EntityView {
     pub size: f32,
     pub traits: Vec<f32>,
     pub origin: sim_core::state::Origin,
+    pub action: Action,
+}
+
+/// What an animal is visibly doing, for animation only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Action {
+    Idle,
+    Walk,
+    Run,
+    Eat,
+    Drink,
 }
 
 #[derive(Clone, Debug)]
@@ -553,6 +564,26 @@ impl Worker {
         } else {
             None
         };
+        // Accepted eating/drinking from the last tick, by entity id.
+        let mut eating: HashMap<u64, (f64, f64)> = HashMap::new();
+        if let (Some(last), Some(prev)) = (&w.last, &w.prev) {
+            let plan = &last.active.plan;
+            let find = |suffix: &str| plan.effects.iter().position(|e| e.id.ends_with(suffix));
+            for (ai, pe) in prev.entities.iter().enumerate() {
+                let _ = ai;
+                let (fe, fd) = (find("/eat"), find("/drink"));
+                for (row, id) in pe.ids.iter().enumerate() {
+                    let get = |e: Option<usize>| e.and_then(|e| last.resolved.accepted.get(e)?.first()?.get(row).copied()).unwrap_or(0.0);
+                    eating.insert(*id, (get(fe), get(fd)));
+                }
+            }
+        }
+        let prev_pos: HashMap<u64, (f64, f64)> = w
+            .prev
+            .as_ref()
+            .map(|p| p.entities.iter().flat_map(|e| e.ids.iter().enumerate().map(move |(i, id)| (*id, (e.x[i], e.z[i])))).collect())
+            .unwrap_or_default();
+        let dt = w.scenario.dt;
         let entities = s
             .archetypes
             .iter()
@@ -573,6 +604,21 @@ impl Worker {
                         size: si.map(|t| e.genome_of(i)[t] as f32).unwrap_or(1.0),
                         traits: e.genome_of(i)[..a.traits.len()].iter().map(|v| *v as f32).collect(),
                         origin: e.lineage[i].origin,
+                        action: {
+                            let speed = prev_pos.get(&e.ids[i]).map(|(x, z)| ((e.x[i] - x).hypot(e.z[i] - z)) / dt).unwrap_or(0.0);
+                            let (eat, drink) = eating.get(&e.ids[i]).copied().unwrap_or((0.0, 0.0));
+                            if drink > 1e-3 && speed < 0.6 {
+                                Action::Drink
+                            } else if eat > 1e-3 && speed < 0.6 {
+                                Action::Eat
+                            } else if speed > 2.2 {
+                                Action::Run
+                            } else if speed > 0.25 {
+                                Action::Walk
+                            } else {
+                                Action::Idle
+                            }
+                        },
                     })
                     .collect()
             })
