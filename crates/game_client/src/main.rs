@@ -4,6 +4,7 @@
 mod charts;
 mod editor;
 mod sim;
+mod theme;
 mod ui;
 mod view;
 
@@ -90,12 +91,10 @@ fn run_script(
             view.overlay = *ov;
             let _ = link.0.tx.send(sim::ToSim::WantFlow(*ov == view::Overlay::Flow));
         }
-        uis.tab = match script.tab.as_deref() {
-            Some("world") => ui::Tab::World,
-            Some("lineage") => ui::Tab::Lineage,
-            Some("laws") => ui::Tab::Laws,
-            Some("tools") => ui::Tab::Tools,
-            _ => ui::Tab::World,
+        uis.tab = if script.tab.as_deref() == Some("laws") {
+            ui::Tab::Laws
+        } else {
+            ui::Tab::Overview
         };
         if let Some(c) = script.select_cell {
             view.selected_cell = Some(c);
@@ -185,7 +184,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Evolving Worlds".into(),
+                title: "Gevolution".into(),
                 resolution: WindowResolution::new(1680, 1000),
                 present_mode: PresentMode::AutoVsync,
                 ..default()
@@ -200,11 +199,19 @@ fn main() {
         .init_resource::<view::Scene3d>()
         .init_resource::<editor::EditorState>()
         .init_resource::<ui::UiState>()
+        .init_resource::<theme::ActiveTheme>()
         .add_systems(Startup, view::setup)
         .add_systems(PreUpdate, pull_snapshot)
         .add_systems(
             Update,
-            (view::update_scene, view::camera_control, view::pointer_tools, view::gizmos).chain(),
+            (
+                view::update_scene,
+                view::camera_control,
+                view::pointer_tools,
+                view::gizmos,
+                view::sky,
+            )
+                .chain(),
         )
         .add_systems(EguiPrimaryContextPass, ui::ui_system)
         .add_systems(Update, run_script)

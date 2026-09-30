@@ -1,4 +1,4 @@
-# Evolving Worlds
+# Gevolution
 
 A single-player ecological god-game sandbox, built in Rust from [`GAME_DEVELOPMENT_SPEC.md`](GAME_DEVELOPMENT_SPEC.md).
 
@@ -20,19 +20,15 @@ The first client build compiles Bevy, which takes a few minutes.
 
 ## Playing
 
-- **Top bar:** pause, 1×, 10×, max and single step (one tick is 0.25 simulated seconds), plus the 3D and map views.
+- **Top bar:** play controls, three tools (🔍 Look, 💧 Water, 🐾 Animals), and the 3D and Map views.
   - Camera controls: right-drag orbits, middle-drag or shift-drag pans, the wheel zooms, WASD moves.
-- **World tab:** population, water and vegetation over time. Resource budgets, events and performance are collapsible sections.
-- **Lineage tab:** inherited trait distributions, comparing the seed generation with organisms born in the world.
-- **Laws tab:** parameter sliders for values, or **Open law editor** for formulas.
-- **Tools tab:**
-  - Inspect a cell or organism by clicking it.
-  - Paint or erase region masks; the mask being painted is shown on the terrain.
-  - Add water or spawn organisms. These are explicit interventions, recorded in the ledger.
-  - Edit parameter fields such as ground permeability.
-- **Inspector (right, collapsible):**
-  - A cell shows its values and an *explain-this-value* ledger for the last tick, with requested versus accepted amounts per law and what limited them.
-  - An organism shows its current condition separately from its inherited traits, plus its senses, brain outputs and actions.
+  - The 🎨 menu switches between the Meadow, Lagoon and Grove themes. Set `GEVOLUTION_THEME` to pick one at startup.
+- **Overview:** animals, plant cover and open water at a glance, how evolution is shifting inherited traits, and collapsed details for budgets and performance.
+- **Laws:** the rules of nature, grouped by topic (Water, Plants, Animals, Weather). Nudge the parameters, or open the law editor to rewrite a formula.
+- **Inspector** (right, collapsible): click the land or an animal with 🔍 Look.
+  - The land here: temperature, water, soil moisture, plants.
+  - *Why is it changing?* shows each law's contribution over the last moment.
+  - An animal shows its health, energy, water and inherited traits.
 
 ### The law editor
 

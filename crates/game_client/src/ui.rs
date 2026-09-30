@@ -1,45 +1,37 @@
-//! Player interface: controls, budgets, inspection, lineage, experiments, tools, guide.
+//! Player interface: a calm top bar, an Overview/Laws side panel, and an inspector.
 
-use crate::charts::{self, PALETTE, Series};
+use crate::charts::{self, Series};
 use crate::editor::{self, EditorState};
 use crate::sim::{Snapshot, Speed, ToSim};
-use crate::view::{Overlay, Tool, ViewMode, ViewState};
+use crate::theme::{self, ActiveTheme, Palette, Theme};
+use crate::view::{Tool, ViewMode, ViewState};
 use crate::{ClientState, SimLink};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy_egui::egui::{self, Color32, RichText};
+use bevy_egui::egui::{self, Color32, CornerRadius, RichText, Stroke};
 use bevy_egui::{EguiContexts, egui::Ui};
-use sim_core::commands::CommandKind;
-use sim_core::state::Origin;
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
-    World,
-    Lineage,
+    Overview,
     Laws,
-    Tools,
 }
 
 #[derive(Resource)]
 pub struct UiState {
     pub tab: Tab,
-    pub new_region: String,
-    pub param_filter: String,
-    pub set_field: String,
-    pub set_field_value: f64,
     pub inspector_open: bool,
+    pub applied_theme: Option<Theme>,
     last_selection: (Option<usize>, Option<u64>),
 }
 
 impl Default for UiState {
     fn default() -> Self {
         UiState {
-            tab: Tab::World,
-            new_region: "my_region".into(),
-            param_filter: String::new(),
-            set_field: "conductance_factor".into(),
-            set_field_value: 0.0,
+            tab: Tab::Overview,
             inspector_open: false,
+            applied_theme: None,
             last_selection: (None, None),
         }
     }
@@ -48,9 +40,31 @@ impl Default for UiState {
 fn fmt_time(t: f64) -> String {
     let t = t.max(0.0) as u64;
     if t >= 3600 {
-        format!("{}h {:02}m {:02}s", t / 3600, t / 60 % 60, t % 60)
+        format!("{}h {:02}m", t / 3600, t / 60 % 60)
     } else {
         format!("{:02}m {:02}s", t / 60, t % 60)
+    }
+}
+
+/// Compact human numbers: 1234 -> "1.2k", 3.4e6 -> "3.4M".
+fn human(v: f64) -> String {
+    let a = v.abs();
+    if !v.is_finite() {
+        "—".into()
+    } else if a >= 1e9 {
+        format!("{:.1}B", v / 1e9)
+    } else if a >= 1e6 {
+        format!("{:.1}M", v / 1e6)
+    } else if a >= 1e4 {
+        format!("{:.1}k", v / 1e3)
+    } else if a >= 100.0 {
+        format!("{v:.0}")
+    } else if a >= 1.0 {
+        format!("{v:.1}")
+    } else if a == 0.0 {
+        "0".into()
+    } else {
+        format!("{v:.2}")
     }
 }
 
@@ -65,8 +79,51 @@ fn fmt(v: f64) -> String {
     } else if a >= 100.0 {
         format!("{v:.1}")
     } else {
-        format!("{v:.4}")
+        format!("{v:.3}")
     }
+}
+
+fn card<R>(ui: &mut Ui, p: &Palette, add: impl FnOnce(&mut Ui) -> R) -> R {
+    egui::Frame::new()
+        .fill(p.card)
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            add(ui)
+        })
+        .inner
+}
+
+/// A pill-shaped toggle button.
+fn pill(ui: &mut Ui, p: &Palette, on: bool, label: &str) -> egui::Response {
+    let text = RichText::new(label).color(if on { p.on_accent } else { p.text });
+    let b = egui::Button::new(text)
+        .fill(if on { p.accent } else { p.soft })
+        .corner_radius(CornerRadius::same(16));
+    ui.add(b)
+}
+
+fn stat(ui: &mut Ui, p: &Palette, color: Color32, value: String, label: &str, sub: String) {
+    egui::Frame::new()
+        .fill(p.card)
+        .corner_radius(CornerRadius::same(12))
+        .inner_margin(egui::Margin::symmetric(12, 8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(value).size(22.0).strong().color(color));
+                ui.add_space(6.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(label).strong());
+                    ui.label(RichText::new(sub).small().color(p.weak));
+                });
+            });
+        });
+}
+
+fn field_of<'a>(s: &'a Snapshot, name: &str) -> Option<&'a [f32]> {
+    s.plan.cell_fields.iter().position(|f| f.0 == name).map(|i| &s.fields[i][..])
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -76,24 +133,19 @@ pub fn ui_system(
     mut view: ResMut<ViewState>,
     mut uis: ResMut<UiState>,
     mut editor: ResMut<EditorState>,
+    mut active: ResMut<ActiveTheme>,
     link: Res<SimLink>,
     window: Single<&Window, With<PrimaryWindow>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?.clone();
-    let Some(s) = state.snapshot.clone() else {
-        egui::Window::new("Loading").show(&ctx, |ui| ui.label("Building the world…"));
-        return Ok(());
-    };
-    if view.region.is_empty()
-        && let Some(r) = s.plan.regions.first()
-    {
-        view.region = r.clone();
+    if uis.applied_theme != Some(active.0) {
+        theme::apply(&ctx, &active.1);
+        uis.applied_theme = Some(active.0);
     }
-    // Terrain always shows the natural look; region painting reveals the mask being painted.
-    view.overlay = if matches!(view.tool, Tool::PaintRegion | Tool::EraseRegion) {
-        Overlay::Region
-    } else {
-        Overlay::Natural
+    let p = active.1;
+    let Some(s) = state.snapshot.clone() else {
+        egui::Window::new("Gevolution").show(&ctx, |ui| ui.label("Growing a world…"));
+        return Ok(());
     };
     if (view.selected_cell, view.selected_entity) != uis.last_selection {
         uis.last_selection = (view.selected_cell, view.selected_entity);
@@ -114,101 +166,114 @@ pub fn ui_system(
     );
 
     // ---- Top bar ----
-    egui::Panel::top("top").show(&mut root, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.heading("Evolving Worlds");
-            ui.separator();
-            ui.monospace(fmt_time(s.time));
-            ui.separator();
-            for (sp, label, tip) in [
-                (Speed::Paused, "⏸", "Pause"),
-                (Speed::X1, "▶ 1×", "Real time"),
-                (Speed::X10, "⏩ 10×", "Ten times faster"),
-                (Speed::Max, "⏭ Max", "As fast as possible"),
-            ] {
-                if ui.selectable_label(s.speed == sp, label).on_hover_text(tip).clicked() {
-                    send(ToSim::Speed(sp));
+    egui::Panel::top("top")
+        .frame(egui::Frame::new().fill(p.panel).inner_margin(egui::Margin::symmetric(14, 8)))
+        .show(&mut root, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("🌱 Gevolution").size(22.0).strong().color(p.accent));
+                ui.add_space(12.0);
+                ui.label(RichText::new(fmt_time(s.time)).monospace().color(p.weak));
+                ui.add_space(8.0);
+                for (sp, label, tip) in [
+                    (Speed::Paused, "⏸", "Pause"),
+                    (Speed::X1, "▶", "Play"),
+                    (Speed::X10, "⏩", "Fast"),
+                    (Speed::Max, "⏭", "Fastest"),
+                ] {
+                    if pill(ui, &p, s.speed == sp, label).on_hover_text(tip).clicked() {
+                        send(ToSim::Speed(sp));
+                    }
                 }
-            }
-            if ui.button("Step").on_hover_text("Advance one tick (0.25 s)").clicked() {
-                send(ToSim::Step(1));
-            }
-            ui.separator();
-            ui.selectable_value(&mut view.mode, ViewMode::Orbit, "3D");
-            ui.selectable_value(&mut view.mode, ViewMode::TopDown, "Map");
-            ui.separator();
-            ui.label(format!("population {}", s.population));
-            if s.pending > 0 {
-                ui.label(RichText::new(format!("{} queued command(s)", s.pending)).color(Color32::YELLOW));
+                ui.add_space(16.0);
+                for (t, label, tip) in [
+                    (
+                        Tool::Inspect,
+                        "🔍 Look",
+                        "Click the land or an animal to see what is happening there",
+                    ),
+                    (Tool::AddWater, "💧 Water", "Hold the mouse on the land to pour water"),
+                    (Tool::SpawnOrganisms, "🐾 Animals", "Click the land to release a small herd"),
+                ] {
+                    if pill(ui, &p, view.tool == t, label).on_hover_text(tip).clicked() {
+                        view.tool = t;
+                    }
+                }
+                ui.add_space(16.0);
+                if pill(ui, &p, view.mode == ViewMode::Orbit, "3D").clicked() {
+                    view.mode = ViewMode::Orbit;
+                }
+                if pill(ui, &p, view.mode == ViewMode::TopDown, "Map").clicked() {
+                    view.mode = ViewMode::TopDown;
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.menu_button("🎨", |ui| {
+                        ui.label(RichText::new("Theme").strong());
+                        for t in Theme::ALL {
+                            if ui.selectable_label(active.0 == t, t.name()).clicked() {
+                                *active = ActiveTheme(t, theme::palette(t));
+                            }
+                        }
+                    });
+                    ui.label(RichText::new(format!("🐾 {}", s.population)).size(16.0).color(p.animals));
+                });
+            });
+            if let Some(f) = &s.failure {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(format!("The world paused: {}", f.message)).color(p.warn).strong());
+                    if ui.button("Resume").clicked() {
+                        send(ToSim::ClearFailure);
+                    }
+                });
             }
         });
-        if let Some(f) = &s.failure {
-            ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(format!("⚠ Paused: {f}"))
-                        .color(Color32::from_rgb(255, 110, 90))
-                        .strong(),
-                );
-                if ui
-                    .button("Resume after fixing")
-                    .on_hover_text("Clear the failure; the failed tick was not committed")
-                    .clicked()
-                {
-                    send(ToSim::ClearFailure);
-                }
-            });
-        }
-        if let Some(m) = state.messages.last() {
-            ui.label(RichText::new(m).small().weak());
-        }
-    });
 
     // ---- Left panel ----
-    egui::Panel::left("left").resizable(true).default_size(330.0).show(&mut root, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            for (t, l) in [
-                (Tab::World, "World"),
-                (Tab::Lineage, "Lineage"),
-                (Tab::Laws, "Laws"),
-                (Tab::Tools, "Tools"),
-            ] {
-                ui.selectable_value(&mut uis.tab, t, l);
-            }
+    egui::Panel::left("left")
+        .resizable(true)
+        .default_size(310.0)
+        .max_size(380.0)
+        .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin::same(12)))
+        .show(&mut root, |ui| {
+            ui.horizontal(|ui| {
+                for (t, l) in [(Tab::Overview, "Overview"), (Tab::Laws, "Laws")] {
+                    if pill(ui, &p, uis.tab == t, l).clicked() {
+                        uis.tab = t;
+                    }
+                }
+            });
+            ui.add_space(6.0);
+            egui::ScrollArea::vertical().show(ui, |ui| match uis.tab {
+                Tab::Overview => overview(ui, &s, &p),
+                Tab::Laws => laws(ui, &s, &p, &mut editor, &send),
+            });
         });
-        ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| match uis.tab {
-            Tab::World => world_tab(ui, &s),
-            Tab::Lineage => lineage_tab(ui, &s),
-            Tab::Laws => laws_tab(ui, &s, &mut uis, &mut editor, &send),
-            Tab::Tools => tools_tab(ui, &s, &mut view, &mut uis, &send),
-        });
-    });
 
     // ---- Right panel: inspector (collapsible) ----
     if uis.inspector_open {
         egui::Panel::right("right")
             .resizable(true)
-            .default_size(340.0)
+            .default_size(320.0)
+            .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin::same(12)))
             .show(&mut root, |ui| {
                 ui.horizontal(|ui| {
-                    ui.heading("Inspector");
+                    ui.label(RichText::new("Inspector").size(18.0).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("▶").on_hover_text("Minimize").clicked() {
+                        if ui.small_button("▶").on_hover_text("Hide").clicked() {
                             uis.inspector_open = false;
                         }
                     });
                 });
-                egui::ScrollArea::vertical().show(ui, |ui| inspector(ui, &s, &mut view, &send));
+                egui::ScrollArea::vertical().show(ui, |ui| inspector(ui, &s, &p, &mut view, &send));
             });
     } else {
         egui::Panel::right("right_min")
             .resizable(false)
-            .exact_size(34.0)
+            .exact_size(40.0)
+            .frame(egui::Frame::new().fill(p.bg).inner_margin(egui::Margin::same(6)))
             .show(&mut root, |ui| {
                 if ui.button("◀").on_hover_text("Show inspector").clicked() {
                     uis.inspector_open = true;
                 }
-                ui.label(RichText::new("I\nn\ns\np\ne\nc\nt").small().weak());
             });
     }
 
@@ -221,6 +286,25 @@ pub fn ui_system(
         (central.width() * sf) as u32,
         (central.height() * sf) as u32,
     ));
+    let hint = match view.tool {
+        Tool::Inspect => None,
+        Tool::AddWater => Some("Hold the mouse on the land to pour water"),
+        Tool::SpawnOrganisms => Some("Click the land to release a small herd"),
+    };
+    if let Some(h) = hint {
+        egui::Area::new("tool_hint".into())
+            .fixed_pos(central.center_top() + egui::vec2(-150.0, 12.0))
+            .show(&ctx, |ui| {
+                egui::Frame::new()
+                    .fill(p.panel)
+                    .corner_radius(CornerRadius::same(14))
+                    .inner_margin(egui::Margin::symmetric(12, 6))
+                    .stroke(Stroke::new(1.0, p.border))
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(h).color(p.text));
+                    });
+            });
+    }
 
     editor::editor_window(&ctx, &mut editor, &s, &send);
 
@@ -229,137 +313,208 @@ pub fn ui_system(
     Ok(())
 }
 
-fn world_tab(ui: &mut Ui, s: &Snapshot) {
-    ui.heading("World");
-    let alive: usize = s.entities.iter().map(|e| e.len()).sum();
-    ui.label(format!(
-        "{alive} organisms alive · {} born · {} died",
-        s.stats.births, s.stats.deaths
-    ));
+fn overview(ui: &mut Ui, s: &Snapshot, p: &Palette) {
+    let area = (s.cell_size * s.cell_size) as f64;
+    let cells = (s.width * s.height) as f64;
+    let total = |name: &str| field_of(s, name).map(|v| v.iter().map(|x| *x as f64).sum::<f64>()).unwrap_or(0.0);
+    let water_m3 = total("surface_water") / 1000.0;
+    let veg = field_of(s, "vegetation_biomass");
+    let cover = veg
+        .map(|v| v.iter().map(|b| (*b / (*b + 500.0)) as f64).sum::<f64>() / cells)
+        .unwrap_or(0.0);
+    let _ = area;
+    stat(
+        ui,
+        p,
+        p.animals,
+        s.population.to_string(),
+        "Animals",
+        format!(
+            "{} born · {} died so far",
+            human(s.stats.births as f64),
+            human(s.stats.deaths as f64)
+        ),
+    );
+    stat(
+        ui,
+        p,
+        p.plants,
+        format!("{:.0}%", cover * 100.0),
+        "Plant cover",
+        "of the land is green".into(),
+    );
+    stat(
+        ui,
+        p,
+        p.water,
+        format!("{} m³", human(water_m3)),
+        "Open water",
+        "in lakes and rivers".into(),
+    );
+    ui.add_space(4.0);
     let h = &s.history;
-    let series = |idx: usize| -> Vec<(f64, f64)> {
-        h.iter()
-            .map(|x| (x.tick as f64 * s.dt, x.field_totals.get(idx).copied().unwrap_or(f64::NAN)))
-            .collect()
-    };
-    let fi = |name: &str| s.plan.cell_fields.iter().position(|f| f.0 == name);
-    if let (Some(a), Some(b), Some(c)) = (fi("surface_water"), fi("soil_water"), fi("groundwater")) {
+    let t = |x: &sim_core::world::Sample| x.tick as f64 * s.dt;
+    card(ui, p, |ui| {
         charts::line_chart(
             ui,
-            "Water inventories (kg)",
-            &[
-                Series {
-                    label: "surface",
-                    color: PALETTE[0],
-                    points: series(a),
-                },
-                Series {
-                    label: "soil",
-                    color: PALETTE[6],
-                    points: series(b),
-                },
-                Series {
-                    label: "ground",
-                    color: PALETTE[5],
-                    points: series(c),
-                },
-            ],
-            110.0,
-            true,
-        );
-    }
-    if let Some(v) = fi("vegetation_biomass") {
-        charts::line_chart(
-            ui,
-            "Vegetation biomass (kg)",
+            "Animals",
             &[Series {
-                label: "vegetation",
-                color: PALETTE[2],
-                points: series(v),
+                label: "",
+                color: p.animals,
+                points: h.iter().map(|x| (t(x), x.population.iter().sum::<usize>() as f64)).collect(),
             }],
             90.0,
             true,
         );
+    });
+    let fi = |name: &str| s.plan.cell_fields.iter().position(|f| f.0 == name);
+    if let (Some(w), Some(v)) = (fi("surface_water"), fi("vegetation_biomass")) {
+        card(ui, p, |ui| {
+            charts::line_chart(
+                ui,
+                "Open water (m³)",
+                &[Series {
+                    label: "",
+                    color: p.water,
+                    points: h
+                        .iter()
+                        .map(|x| (t(x), x.field_totals.get(w).copied().unwrap_or(f64::NAN) / 1000.0))
+                        .collect(),
+                }],
+                70.0,
+                true,
+            );
+            charts::line_chart(
+                ui,
+                "Plants (tonnes)",
+                &[Series {
+                    label: "",
+                    color: p.plants,
+                    points: h
+                        .iter()
+                        .map(|x| (t(x), x.field_totals.get(v).copied().unwrap_or(f64::NAN) / 1000.0))
+                        .collect(),
+                }],
+                70.0,
+                true,
+            );
+        });
     }
-    let pop: Vec<(f64, f64)> = h
-        .iter()
-        .map(|x| (x.tick as f64 * s.dt, x.population.iter().sum::<usize>() as f64))
-        .collect();
-    charts::line_chart(
-        ui,
-        "Population",
-        &[Series {
-            label: "organisms",
-            color: PALETTE[1],
-            points: pop,
-        }],
-        90.0,
-        true,
-    );
-    if !s.stats.deaths_by_reason.is_empty() {
-        ui.label(format!(
-            "death reasons: {}",
-            s.stats
-                .deaths_by_reason
-                .iter()
-                .map(|(k, v)| format!("{k} {v}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-    }
-    for (f, n) in &s.stats.range_violations {
-        if *n > 0 {
-            ui.label(RichText::new(format!("range diagnostic: {n} cells of {f} outside declared range")).color(Color32::YELLOW));
+    // Evolution, in plain words.
+    card(ui, p, |ui| {
+        ui.label(RichText::new("Evolution").strong());
+        let (Some(first), Some(last)) = (h.first(), h.last()) else { return };
+        let generation = last.mean_generation.first().copied().unwrap_or(0.0);
+        if generation < 0.05 {
+            ui.label(
+                RichText::new(
+                    "Evolution begins once animals are born in the world. Offspring inherit their parents' traits with small mutations.",
+                )
+                .color(p.weak),
+            );
+            return;
         }
+        ui.label(RichText::new(format!("Average generation {generation:.1}")).color(p.weak));
+        ui.add_space(4.0);
+        let labels = trait_labels(s);
+        for (k, (name, label)) in labels.iter().enumerate() {
+            let (a, b) = (
+                first.trait_means.first().and_then(|m| m.get(k)).copied(),
+                last.trait_means.first().and_then(|m| m.get(k)).copied(),
+            );
+            let (Some(a), Some(b)) = (a, b) else { continue };
+            if !a.is_finite() || !b.is_finite() {
+                continue;
+            }
+            let change = if a.abs() > 1e-9 { (b - a) / a.abs() * 100.0 } else { 0.0 };
+            let (tag, col) = if change > 1.0 {
+                (format!("+{change:.0}%"), p.accent)
+            } else if change < -1.0 {
+                (format!("{change:.0}%"), p.animals)
+            } else {
+                ("steady".to_string(), p.weak)
+            };
+            ui.horizontal(|ui| {
+                ui.label(label);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(tag).color(col).strong());
+                    ui.label(RichText::new(trait_value(name, b)).color(p.weak));
+                });
+            });
+        }
+    });
+    egui::CollapsingHeader::new(RichText::new("More details").color(p.weak))
+        .id_salt("details")
+        .show(ui, |ui| details(ui, s));
+}
+
+/// (trait id, friendly label) for the first archetype.
+fn trait_labels(s: &Snapshot) -> Vec<(String, String)> {
+    let Some((arch, traits)) = s.plan.archetypes.first() else {
+        return vec![];
+    };
+    let friendly = |id: &str| -> Option<&'static str> {
+        Some(match id {
+            "body_size" => "Body size",
+            "preferred_temperature" => "Favourite temperature",
+            "tolerance_breadth" => "Heat tolerance",
+            "water_conservation" => "Saves water",
+            "locomotion_efficiency" => "Walking efficiency",
+            _ => return None,
+        })
+    };
+    let decl = s.plan.packages.iter().flat_map(|p| &p.archetypes).find(|a| &a.id == arch);
+    traits
+        .iter()
+        .map(|(id, _, _)| {
+            let label = friendly(id)
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    decl.and_then(|d| d.traits.iter().find(|t| &t.id == id))
+                        .map(|t| t.label.clone())
+                        .filter(|l| !l.is_empty())
+                })
+                .unwrap_or_else(|| id.replace('_', " "));
+            (id.clone(), label)
+        })
+        .collect()
+}
+
+fn trait_value(id: &str, v: f64) -> String {
+    match id {
+        "preferred_temperature" => format!("{:.1}°C", v - 273.15),
+        "tolerance_breadth" => format!("±{v:.1}°"),
+        "water_conservation" | "locomotion_efficiency" => format!("{:.0}%", v * 100.0),
+        _ => format!("{v:.2}"),
     }
-    ui.collapsing("Resource budgets", |ui| {
-        ui.label(
-            RichText::new(
-                "Tracked totals follow total_next = total_now + explicit external inputs − outputs. Errors are unexplained drift.",
-            )
-            .small(),
-        );
-        egui::Grid::new("ledger").striped(true).show(ui, |ui| {
-            ui.strong("resource");
-            ui.strong("total");
-            ui.strong("tick error / tol.");
-            ui.strong("cumulative err.");
+}
+
+fn details(ui: &mut Ui, s: &Snapshot) {
+    if !s.stats.deaths_by_reason.is_empty() {
+        ui.label(RichText::new("Causes of death").strong());
+        for (k, v) in &s.stats.deaths_by_reason {
+            ui.label(format!("{k}: {v}"));
+        }
+        ui.add_space(4.0);
+    }
+    ui.label(RichText::new("Resource budgets").strong());
+    ui.label(RichText::new("Every resource is conserved: totals change only through declared inputs and outputs.").small());
+    egui::Grid::new("ledger").show(ui, |ui| {
+        for l in &s.ledger {
+            ui.label(&l.resource);
+            ui.monospace(fmt(l.total));
+            ui.label(RichText::new(format!("drift {}", fmt(l.cumulative_error))).small());
             ui.end_row();
-            for l in &s.ledger {
-                ui.label(&l.resource);
-                ui.monospace(fmt(l.total));
-                ui.monospace(format!("{} / {}", fmt(l.last_tick_error), fmt(l.last_tolerance)));
-                ui.monospace(fmt(l.cumulative_error));
+        }
+    });
+    ui.collapsing("Inputs and outputs", |ui| {
+        egui::Grid::new("accounts").show(ui, |ui| {
+            for (id, res, label, i, o) in &s.accounts {
+                ui.label(if label.is_empty() { id.as_str() } else { label.as_str() })
+                    .on_hover_text(format!("{id} ({res})"));
+                ui.monospace(format!("+{} −{}", fmt(*i), fmt(*o)));
                 ui.end_row();
             }
-        });
-        ui.collapsing("External accounts (open boundaries and toy exchanges)", |ui| {
-            egui::Grid::new("accounts").striped(true).show(ui, |ui| {
-                ui.strong("account");
-                ui.strong("in");
-                ui.strong("out");
-                ui.end_row();
-                for (id, res, label, i, o) in &s.accounts {
-                    ui.label(format!("{id} ({res})")).on_hover_text(label);
-                    ui.monospace(fmt(*i));
-                    ui.monospace(fmt(*o));
-                    ui.end_row();
-                }
-                for (r, i, o, ro) in &s.interventions {
-                    if *i != 0.0 || *o != 0.0 {
-                        ui.label(format!("interventions ({r})"));
-                        ui.monospace(fmt(*i));
-                        ui.monospace(fmt(*o));
-                        ui.end_row();
-                    }
-                    if *ro != 0.0 {
-                        ui.label(format!("roundoff corrections ({r})"));
-                        ui.monospace(fmt(*ro));
-                        ui.label("");
-                        ui.end_row();
-                    }
-                }
-            });
         });
     });
     ui.collapsing("Recent events", |ui| {
@@ -370,391 +525,305 @@ fn world_tab(ui: &mut Ui, s: &Snapshot) {
     ui.collapsing("Performance", |ui| {
         let t = &s.timings;
         ui.monospace(format!(
-            "tick {:.2} ms\n snapshot {:.2}  eval {:.2}  resolve {:.2}\n receipts {:.2}  integrate {:.2}  lifecycle {:.2}\n validate {:.2}  commit {:.2}",
-            t.total, t.snapshot, t.evaluation, t.resolution, t.receipts, t.integration, t.lifecycle, t.validation, t.commit
+            "tick {:.2} ms  ({:.0} ticks/s)\nlaws {:.2} · resources {:.2} · life {:.2}",
+            t.total, s.ticks_per_second, t.evaluation, t.resolution, t.lifecycle
         ));
-        ui.monospace(format!("plan: {} instructions, ~{:.1} M element-ops/tick", s.plan.instructions, s.plan.element_ops as f64 / 1e6));
     });
 }
 
-fn lineage_tab(ui: &mut Ui, s: &Snapshot) {
-    for (ai, (arch, traits)) in s.plan.archetypes.iter().enumerate() {
-        ui.heading(arch);
-        let ents = &s.entities[ai];
-        let (mut seeded, mut born, mut intervened, mut authored) = (0, 0, 0, 0);
-        for e in ents {
-            match e.origin {
-                Origin::Random => seeded += 1,
-                Origin::Authored => authored += 1,
-                Origin::Born => born += 1,
-                Origin::Intervention => intervened += 1,
-            }
-        }
-        ui.label(format!(
-            "alive {}: born in-world {born}, random seed genomes {seeded}, authored control genomes {authored}, interventions {intervened}",
-            ents.len()
-        ));
-        if authored > 0 {
-            ui.label(
-                RichText::new("Authored genomes are labeled control fixtures, not evolved results.")
-                    .small()
-                    .color(Color32::YELLOW),
-            );
-        }
-        let generation: Vec<(f64, f64)> = s
-            .history
-            .iter()
-            .map(|x| (x.tick as f64 * s.dt, x.mean_generation.get(ai).copied().unwrap_or(f64::NAN)))
-            .collect();
-        charts::line_chart(
-            ui,
-            "Mean generation",
-            &[Series {
-                label: "generation",
-                color: PALETTE[3],
-                points: generation,
-            }],
-            70.0,
-            true,
+fn laws(ui: &mut Ui, s: &Snapshot, p: &Palette, editor: &mut EditorState, send: &dyn Fn(ToSim)) {
+    card(ui, p, |ui| {
+        ui.label(RichText::new("How the world works").strong());
+        ui.label(
+            RichText::new("Every rule of nature here is editable. Nudge the numbers below, or open the editor to rewrite a rule.")
+                .color(p.weak),
         );
-        ui.label(RichText::new("Inherited trait distributions: seed generation vs. born later").strong());
-        for (t, (name, lo, hi)) in traits.iter().enumerate() {
-            let mut first = [0u32; 10];
-            let mut later = [0u32; 10];
-            for e in ents {
-                let v = e.traits[t] as f64;
-                let b = (((v - lo) / (hi - lo).max(1e-12)) * 10.0).floor().clamp(0.0, 9.0) as usize;
-                if e.generation == 0 { first[b] += 1 } else { later[b] += 1 }
-            }
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.set_width(ui.available_width() / 2.0 - 4.0);
-                    charts::histogram(ui, &format!("{name} (gen 0)"), &first, *lo, *hi, PALETTE[7], 44.0);
-                });
-                ui.vertical(|ui| charts::histogram(ui, &format!("{name} (born)"), &later, *lo, *hi, PALETTE[t % 6], 44.0));
+        ui.add_space(4.0);
+        let b = egui::Button::new(RichText::new("✏ Open law editor").color(p.on_accent))
+            .fill(p.accent)
+            .corner_radius(CornerRadius::same(16));
+        if ui.add(b).clicked() {
+            editor.open(s);
+        }
+    });
+    // Group laws by what they are about, with short names.
+    let topic = |rule: &str| -> &'static str {
+        if rule.starts_with("core.bio") {
+            "🐾 Animals"
+        } else if rule.contains("vegetation") || rule.contains("decomposition") || rule.contains("dispersal") {
+            "🌿 Plants"
+        } else if rule.contains("temperature") {
+            "☀ Weather"
+        } else {
+            "💧 Water"
+        }
+    };
+    let mut labels: BTreeMap<String, String> = BTreeMap::new();
+    for pk in &s.plan.packages {
+        for r in &pk.rules {
+            let l = if r.label.is_empty() { r.rule_id.clone() } else { r.label.clone() };
+            let short = l.split(" (").next().unwrap_or(&l).split(" with ").next().unwrap_or(&l).to_string();
+            labels.insert(r.rule_id.clone(), short);
+        }
+    }
+    let mut topics: BTreeMap<&str, BTreeMap<String, Vec<&crate::sim::ParamView>>> = BTreeMap::new();
+    for pv in &s.plan.params {
+        let owner = pv.name.split(':').next().unwrap_or("");
+        let Some(law) = labels.get(owner) else { continue };
+        topics.entry(topic(owner)).or_default().entry(law.clone()).or_default().push(pv);
+    }
+    let order = ["💧 Water", "🌿 Plants", "🐾 Animals", "☀ Weather"];
+    let mut topics: Vec<(&str, BTreeMap<String, Vec<&crate::sim::ParamView>>)> = topics.into_iter().collect();
+    topics.sort_by_key(|(t, _)| order.iter().position(|o| o == t).unwrap_or(9));
+    for (t, laws) in topics {
+        egui::CollapsingHeader::new(RichText::new(t).strong().size(16.0))
+            .id_salt(("topic", t))
+            .show(ui, |ui| {
+                for (law, params) in laws {
+                    egui::CollapsingHeader::new(&law).id_salt(("law", &law)).show(ui, |ui| {
+                        for pv in params {
+                            let mut v = pv.value;
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(if pv.label.is_empty() { &pv.name } else { &pv.label })
+                                        .small()
+                                        .color(p.weak),
+                                )
+                                .wrap(),
+                            )
+                            .on_hover_text(&pv.name);
+                            let log = pv.min >= 0.0 && pv.max / pv.min.max(1e-12) > 100.0;
+                            let resp = ui.add(
+                                egui::Slider::new(&mut v, pv.min..=pv.max)
+                                    .logarithmic(log)
+                                    .suffix(format!(" {}", pv.unit)),
+                            );
+                            if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
+                                send(ToSim::Submit(sim_core::commands::CommandKind::SetParam {
+                                    name: pv.name.clone(),
+                                    value: v,
+                                }));
+                            }
+                        }
+                    });
+                }
             });
-            let means: Vec<(f64, f64)> = s
-                .history
+    }
+}
+
+fn bar(ui: &mut Ui, p: &Palette, label: &str, frac: f64, color: Color32, text: String) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(label).color(p.weak));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(text));
+    });
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 8.0), egui::Sense::hover());
+    ui.painter().rect_filled(rect, CornerRadius::same(4), p.soft);
+    let mut fill = rect;
+    fill.set_width(rect.width() * frac.clamp(0.0, 1.0) as f32);
+    ui.painter().rect_filled(fill, CornerRadius::same(4), color);
+}
+
+fn row(ui: &mut Ui, p: &Palette, label: &str, value: String) {
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(label).color(p.weak));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(value));
+    });
+}
+
+const EXPLAIN: [(&str, &str); 5] = [
+    ("surface_water", "Open water"),
+    ("soil_water", "Soil moisture"),
+    ("groundwater", "Groundwater"),
+    ("vegetation_biomass", "Plants"),
+    ("temperature", "Temperature"),
+];
+
+fn inspector(ui: &mut Ui, s: &Snapshot, p: &Palette, view: &mut ViewState, send: &dyn Fn(ToSim)) {
+    let Some(c) = view.selected_cell else {
+        card(ui, p, |ui| {
+            ui.label(RichText::new("Nothing selected").strong());
+            ui.label(
+                RichText::new("Pick 🔍 Look in the top bar, then click the land or an animal to see what is happening there.")
+                    .color(p.weak),
+            );
+        });
+        return;
+    };
+    ui.horizontal(|ui| {
+        if ui.button("Clear selection").clicked() {
+            view.selected_cell = None;
+            view.selected_entity = None;
+            send(ToSim::SelectCell(None, String::new()));
+            send(ToSim::SelectEntity(None));
+        }
+    });
+    if let Some(o) = &s.entity {
+        card(ui, p, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("🐾 Animal #{}", o.id)).strong().color(p.animals));
+                if !o.alive {
+                    ui.label(RichText::new("died").color(p.warn));
+                }
+            });
+            ui.label(
+                RichText::new(format!(
+                    "generation {} · {} offspring · {:.0} s old",
+                    o.lineage.generation, o.lineage.offspring, o.age
+                ))
+                .small()
+                .color(p.weak),
+            );
+            let get = |k: &str| o.fields.iter().find(|f| f.0 == k).map(|f| f.1).unwrap_or(0.0);
+            let size = o.traits.iter().find(|t| t.0 == "body_size").map(|t| t.1).unwrap_or(1.0);
+            bar(ui, p, "Health", get("health"), p.accent, format!("{:.0}%", get("health") * 100.0));
+            bar(
+                ui,
+                p,
+                "Energy",
+                get("energy") / (300_000.0 * size),
+                p.animals,
+                format!("{:.0} kJ", get("energy") / 1000.0),
+            );
+            bar(
+                ui,
+                p,
+                "Water",
+                get("body_water") / (20.0 * size),
+                p.water,
+                format!("{:.1} L", get("body_water")),
+            );
+            let names = ["turning", "moving", "eating", "drinking", "wanting to breed", "resting"];
+            let doing: Vec<&str> = o
+                .outputs
                 .iter()
-                .map(|x| {
-                    (
-                        x.tick as f64 * s.dt,
-                        x.trait_means.get(ai).and_then(|m| m.get(t)).copied().unwrap_or(f64::NAN),
-                    )
-                })
+                .enumerate()
+                .filter(|(i, v)| *i >= 1 && **v > 0.3)
+                .map(|(i, _)| names[i])
                 .collect();
+            if !doing.is_empty() {
+                ui.label(RichText::new(format!("Right now: {}", doing.join(", "))).small());
+            }
+            ui.add_space(4.0);
+            ui.label(RichText::new("Inherited traits").strong());
+            let labels = trait_labels(s);
+            for (id, v) in &o.traits {
+                let l = labels.iter().find(|x| &x.0 == id).map(|x| x.1.clone()).unwrap_or(id.clone());
+                row(ui, p, &l, trait_value(id, *v));
+            }
+            egui::CollapsingHeader::new(RichText::new("What it senses and does").small())
+                .id_salt("brain")
+                .show(ui, |ui| {
+                    for (n, v) in &o.inputs {
+                        ui.label(
+                            RichText::new(format!("{}: {:+.2}", n.rsplit('/').next().unwrap_or(n).replace('_', " "), v))
+                                .small()
+                                .monospace(),
+                        );
+                    }
+                    for p_ in &o.processes {
+                        ui.label(RichText::new(format!("{} — {:.0}% of what it asked for", p_.label, p_.factor * 100.0)).small());
+                    }
+                });
+        });
+    }
+    let (x, z) = (c % s.width, c / s.width);
+    card(ui, p, |ui| {
+        ui.label(RichText::new("🌿 The land here").strong().color(p.plants));
+        ui.label(
+            RichText::new(format!("spot ({x}, {z}) · {:.0} m high", s.elevation[c]))
+                .small()
+                .color(p.weak),
+        );
+        let get = |k: &str| field_of(s, k).map(|v| v[c] as f64).unwrap_or(0.0);
+        let area = s.cell_size * s.cell_size;
+        let depth_mm = get("surface_water") / area;
+        row(ui, p, "Temperature", format!("{:.1} °C", get("temperature") - 273.15));
+        row(
+            ui,
+            p,
+            "Water on the surface",
+            if depth_mm < 0.1 {
+                "dry".into()
+            } else {
+                format!("{depth_mm:.0} mm deep")
+            },
+        );
+        let cap = get("soil_water_capacity");
+        bar(
+            ui,
+            p,
+            "Soil moisture",
+            if cap > 0.0 { get("soil_water") / cap } else { 0.0 },
+            p.water,
+            format!("{:.0}%", if cap > 0.0 { get("soil_water") / cap * 100.0 } else { 0.0 }),
+        );
+        let veg = get("vegetation_biomass");
+        bar(ui, p, "Plants", veg / 3000.0, p.plants, format!("{:.0} kg", veg));
+        row(ui, p, "Groundwater", format!("{:.1} m³", get("groundwater") / 1000.0));
+        row(ui, p, "Soil nutrients", format!("{:.0} kg", get("soil_nutrients")));
+    });
+    card(ui, p, |ui| {
+        ui.label(RichText::new("Why is it changing?").strong());
+        let current = EXPLAIN
+            .iter()
+            .find(|e| e.0 == view.inspect_field)
+            .map(|e| e.1)
+            .unwrap_or("Open water");
+        egui::ComboBox::from_id_salt("explain").selected_text(current).show_ui(ui, |ui| {
+            for (f, l) in EXPLAIN {
+                if ui.selectable_label(view.inspect_field == f, l).clicked() {
+                    view.inspect_field = f.to_string();
+                    send(ToSim::SelectCell(Some(c), f.to_string()));
+                }
+            }
+        });
+        let Some(e) = &s.cell else { return };
+        ui.label(RichText::new("Changes during the last moment (0.25 s):").small().color(p.weak));
+        let mut any = false;
+        for k in &e.contributions {
+            if k.accepted.abs() < 1e-9 {
+                continue;
+            }
+            any = true;
+            let base = k.label.split(" (").next().unwrap_or(&k.label);
+            let short: String = if base.chars().count() > 24 {
+                format!("{}…", base.chars().take(23).collect::<String>())
+            } else {
+                base.to_string()
+            };
+            ui.horizontal(|ui| {
+                let col = if k.accepted > 0.0 { p.accent } else { p.animals };
+                ui.label(RichText::new(if k.accepted > 0.0 { "+" } else { "-" }).color(col).strong());
+                ui.label(short).on_hover_text(if k.min_factor < 1.0 {
+                    format!(
+                        "{}\nOnly {:.0}% of what was asked for was possible{}",
+                        k.label,
+                        k.min_factor * 100.0,
+                        k.limited_by.as_ref().map(|l| format!(" — limited by {l}")).unwrap_or_default()
+                    )
+                } else {
+                    k.label.clone()
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(RichText::new(format!("{} {}", fmt(k.accepted.abs()), e.unit)).small().monospace());
+                });
+            });
+        }
+        if !any {
+            ui.label(RichText::new("Nothing is changing here right now.").color(p.weak));
+        }
+        if s.cell_history.len() > 1 {
             charts::line_chart(
                 ui,
-                &format!("mean {name}"),
+                "Recent history",
                 &[Series {
-                    label: name,
-                    color: PALETTE[t % 6],
-                    points: means,
+                    label: "",
+                    color: p.water,
+                    points: s.cell_history.iter().map(|x| (x.0, x.1)).collect(),
                 }],
-                50.0,
+                60.0,
                 false,
             );
         }
-    }
-}
-
-fn laws_tab(ui: &mut Ui, s: &Snapshot, uis: &mut UiState, editor: &mut EditorState, send: &dyn Fn(ToSim)) {
-    ui.heading("Laws");
-    ui.label(
-        RichText::new("Laws are typed graphs. Parameters here change a value inside its validated range; the editor changes formulas.")
-            .small(),
-    );
-    if ui.button("Open law editor").clicked() {
-        editor.open(s);
-    }
-    ui.label(format!(
-        "{} instructions, {} effects in the active plan",
-        s.plan.instructions,
-        s.plan.effects.len()
-    ));
-    for w in &s.plan.warnings {
-        ui.label(RichText::new(w).small().color(Color32::YELLOW));
-    }
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.label("filter");
-        ui.text_edit_singleline(&mut uis.param_filter);
     });
-    for p in &s.plan.params {
-        if !uis.param_filter.is_empty() && !p.name.contains(&uis.param_filter) && !p.label.contains(&uis.param_filter) {
-            continue;
-        }
-        let mut v = p.value;
-        ui.horizontal(|ui| {
-            let resp = ui.add(
-                egui::Slider::new(&mut v, p.min..=p.max)
-                    .logarithmic(p.min >= 0.0 && p.max / p.min.max(1e-12) > 100.0)
-                    .text(&p.unit),
-            );
-            ui.label(RichText::new(if p.label.is_empty() { &p.name } else { &p.label }).small())
-                .on_hover_text(&p.name);
-            if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
-                send(ToSim::Submit(CommandKind::SetParam {
-                    name: p.name.clone(),
-                    value: v,
-                }));
-            }
-        });
-    }
-}
-
-fn tools_tab(ui: &mut Ui, s: &Snapshot, view: &mut ViewState, uis: &mut UiState, send: &dyn Fn(ToSim)) {
-    ui.heading("Tools");
-    ui.label(
-        RichText::new("Interventions are explicit sources or sinks recorded in the ledger; they never masquerade as law edits.").small(),
-    );
-    for (t, l) in [
-        (Tool::Inspect, "Inspect (click a cell or organism)"),
-        (Tool::PaintRegion, "Paint region"),
-        (Tool::EraseRegion, "Erase region"),
-        (Tool::AddWater, "Add water (intervention)"),
-        (Tool::SpawnOrganisms, "Spawn organisms (intervention)"),
-    ] {
-        ui.radio_value(&mut view.tool, t, l);
-    }
-    ui.add(egui::Slider::new(&mut view.brush_radius, 1.0..=40.0).text("brush radius (cells)"));
-    ui.separator();
-    ui.label("Region");
-    egui::ComboBox::from_id_salt("region")
-        .selected_text(view.region.clone())
-        .show_ui(ui, |ui| {
-            for r in &s.plan.regions {
-                ui.selectable_value(&mut view.region, r.clone(), r);
-            }
-        });
-    ui.horizontal(|ui| {
-        ui.text_edit_singleline(&mut uis.new_region);
-        if ui.button("Create region").clicked() {
-            send(ToSim::Submit(CommandKind::CreateRegion {
-                id: uis.new_region.clone(),
-            }));
-            view.region = uis.new_region.clone();
-        }
-    });
-    ui.label(
-        RichText::new("Region membership is a mask, not a biome. Rules scoped to it still conserve resources across its edge.").small(),
-    );
-    ui.separator();
-    ui.add(
-        egui::DragValue::new(&mut view.water_amount)
-            .prefix("water per cell: ")
-            .suffix(" kg")
-            .range(-1e6..=1e6),
-    );
-    ui.add(
-        egui::DragValue::new(&mut view.spawn_count)
-            .prefix("organisms per click: ")
-            .range(1..=500),
-    );
-    ui.separator();
-    ui.label("Edit a parameter field in the brush (e.g. make ground impermeable)");
-    egui::ComboBox::from_id_salt("setfield")
-        .selected_text(uis.set_field.clone())
-        .show_ui(ui, |ui| {
-            for (f, _, pol) in &s.plan.cell_fields {
-                if pol == "Parameter" && f != "elevation" {
-                    ui.selectable_value(&mut uis.set_field, f.clone(), f);
-                }
-            }
-        });
-    ui.add(egui::DragValue::new(&mut uis.set_field_value).prefix("value: ").speed(0.01));
-    if let Some(c) = view.selected_cell {
-        if ui.button("Apply to brush at selected cell").clicked() {
-            let (cx, cz) = ((c % s.width) as f64 + 0.5, (c / s.width) as f64 + 0.5);
-            send(ToSim::Submit(CommandKind::SetField {
-                field: uis.set_field.clone(),
-                shape: sim_core::schema::RegionShape::Circle {
-                    cx,
-                    cz,
-                    radius: view.brush_radius as f64,
-                    feather: 0.0,
-                },
-                value: uis.set_field_value,
-            }));
-        }
-    } else {
-        ui.label(RichText::new("select a cell first").small());
-    }
-    ui.separator();
-}
-
-fn inspector(ui: &mut Ui, s: &Snapshot, view: &mut ViewState, send: &dyn Fn(ToSim)) {
-    let Some(c) = view.selected_cell else {
-        ui.label("Select a cell or organism with the Inspect tool.");
-        return;
-    };
-    let (x, z) = (c % s.width, c / s.width);
-    ui.label(format!("cell ({x}, {z})  #{c}  elevation {:.1} m", s.elevation[c]));
-    egui::Grid::new("cellvals").striped(true).show(ui, |ui| {
-        for (i, (f, unit, pol)) in s.plan.cell_fields.iter().enumerate() {
-            if ui
-                .selectable_label(view.inspect_field == *f, f)
-                .on_hover_text(format!("{pol} field"))
-                .clicked()
-            {
-                view.inspect_field = f.clone();
-                send(ToSim::SelectCell(Some(c), f.clone()));
-            }
-            ui.monospace(format!("{} {unit}", fmt(s.fields[i][c] as f64)));
-            ui.end_row();
-        }
-        for (i, r) in s.plan.regions.iter().enumerate() {
-            let v = s.regions[i][c];
-            if v > 0.0 {
-                ui.label(format!("region {r}"));
-                ui.monospace(format!("coverage {v:.2}"));
-                ui.end_row();
-            }
-        }
-    });
-    if let Some(e) = &s.cell {
-        ui.separator();
-        ui.label(RichText::new(format!("Explain {} ({}), last tick", e.field, e.policy)).strong());
-        egui::Grid::new("explain").striped(true).show(ui, |ui| {
-            ui.label("previous tick");
-            ui.monospace(format!("{} {}", fmt(e.previous), e.unit));
-            ui.label("");
-            ui.end_row();
-            for k in &e.contributions {
-                let short: String = if k.label.chars().count() > 30 {
-                    format!("{}…", k.label.chars().take(30).collect::<String>())
-                } else {
-                    k.label.clone()
-                };
-                ui.label(short)
-                    .on_hover_text(format!("{}\neffect {} of rule {}", k.label, k.effect, k.rule));
-                ui.monospace(format!("{:+}", Fmt(k.accepted)));
-                let lim = if k.min_factor < 1.0 {
-                    format!(
-                        "requested {:+} ({:.0}% accepted){}",
-                        Fmt(k.requested),
-                        k.min_factor * 100.0,
-                        k.limited_by.as_ref().map(|l| format!("; limited by {l}")).unwrap_or_default()
-                    )
-                } else {
-                    "fully accepted".into()
-                };
-                ui.label(RichText::new(lim).small());
-                ui.end_row();
-            }
-            if e.other != 0.0 {
-                ui.label("lifecycle deposits");
-                ui.monospace(format!("{:+}", Fmt(e.other)));
-                ui.label("");
-                ui.end_row();
-            }
-            ui.label(RichText::new("this tick").strong());
-            ui.monospace(format!("{} {}", fmt(e.current), e.unit));
-            ui.label("");
-            ui.end_row();
-        });
-    }
-    if s.cell_history.len() > 1 {
-        let h = &s.cell_history;
-        charts::line_chart(
-            ui,
-            &format!("{} at this cell, recent ticks", view.inspect_field),
-            &[Series {
-                label: "value",
-                color: PALETTE[0],
-                points: h.iter().map(|x| (x.0, x.1)).collect(),
-            }],
-            70.0,
-            false,
-        );
-        charts::line_chart(
-            ui,
-            "accepted in / out per tick",
-            &[
-                Series {
-                    label: "in",
-                    color: PALETTE[2],
-                    points: h.iter().map(|x| (x.0, x.2)).collect(),
-                },
-                Series {
-                    label: "out",
-                    color: PALETTE[4],
-                    points: h.iter().map(|x| (x.0, x.3)).collect(),
-                },
-            ],
-            70.0,
-            true,
-        );
-    }
-    if let Some(o) = &s.entity {
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Organism {}", o.id)).strong());
-            if !o.alive {
-                ui.label(RichText::new("died this tick").color(Color32::from_rgb(255, 110, 90)));
-            }
-            if ui.small_button("deselect").clicked() {
-                view.selected_entity = None;
-                send(ToSim::SelectEntity(None));
-            }
-        });
-        ui.label(format!(
-            "generation {} · parent {} · lineage root {} · origin {:?} · offspring {} · age {:.0} s",
-            o.lineage.generation, o.lineage.parent, o.lineage.root, o.lineage.origin, o.lineage.offspring, o.age
-        ));
-        ui.label(RichText::new("Current condition (transient state)").strong());
-        egui::Grid::new("ofields").striped(true).show(ui, |ui| {
-            for (f, now, prev) in &o.fields {
-                ui.label(f);
-                ui.monospace(fmt(*now));
-                ui.label(RichText::new(format!("{:+}", Fmt(now - prev))).small());
-                ui.end_row();
-            }
-        });
-        ui.label(RichText::new("Inherited traits (genome)").strong());
-        egui::Grid::new("otraits").striped(true).show(ui, |ui| {
-            for (t, v) in &o.traits {
-                ui.label(t);
-                ui.monospace(fmt(*v));
-                ui.end_row();
-            }
-        });
-        ui.collapsing("Sensed inputs and brain outputs", |ui| {
-            for (n, v) in &o.inputs {
-                ui.monospace(format!("{:>34} {:+.3}", n.rsplit('/').next().unwrap_or(n), v));
-            }
-            let names = ["turn", "forward", "eat", "drink", "reproduce", "rest"];
-            for (i, v) in o.outputs.iter().enumerate() {
-                ui.monospace(format!("{:>34} {:+.3}", names.get(i).copied().unwrap_or("out"), v));
-            }
-        });
-        ui.label(format!(
-            "attempted speed {:.2} m/s → actual {:.2} m/s",
-            o.attempted_speed, o.actual_speed
-        ));
-        ui.collapsing("Processes (requested vs accepted)", |ui| {
-            for p in &o.processes {
-                ui.label(RichText::new(format!("{} — {:.0}%", p.label, p.factor * 100.0)).strong())
-                    .on_hover_text(&p.effect);
-                for (r, q, a) in &p.legs {
-                    ui.monospace(format!("   {r}: requested {} accepted {}", fmt(*q), fmt(*a)));
-                }
-                if let Some(l) = &p.limited_by {
-                    ui.label(RichText::new(format!("   limited by {l}")).small());
-                }
-            }
-        });
-    }
-}
-
-struct Fmt(f64);
-impl std::fmt::Display for Fmt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = fmt(self.0.abs());
-        if f.sign_plus() {
-            write!(f, "{}{s}", if self.0 < 0.0 { "−" } else { "+" })
-        } else {
-            write!(f, "{s}")
-        }
-    }
 }

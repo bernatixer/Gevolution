@@ -109,8 +109,6 @@ pub enum ViewMode {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
     Inspect,
-    PaintRegion,
-    EraseRegion,
     AddWater,
     SpawnOrganisms,
 }
@@ -135,6 +133,7 @@ pub struct ViewState {
     /// Viewport rect in physical pixels (x, y, w, h), set by the UI layout.
     pub viewport: Option<(u32, u32, u32, u32)>,
     pub last_paint: Option<(usize, f64)>,
+    pub press_pos: Option<Vec2>,
     pub orbit_target: Vec3,
     pub orbit_yaw: f32,
     pub orbit_pitch: f32,
@@ -163,6 +162,7 @@ impl Default for ViewState {
             hover_cell: None,
             viewport: None,
             last_paint: None,
+            press_pos: None,
             orbit_target: Vec3::ZERO,
             orbit_yaw: 0.6,
             orbit_pitch: 0.75,
@@ -199,6 +199,8 @@ pub struct Scene3d {
     organism_mats: Vec<Handle<StandardMaterial>>,
     organisms: HashMap<u64, Entity>,
     colored_for: Option<(u64, Overlay, String)>,
+    /// Frames to keep recoloring after (re)spawning instances, whose entities appear a frame later.
+    recolor_frames: u8,
     plants_stride: usize,
 }
 
@@ -636,6 +638,7 @@ pub fn update_scene(
         scene.built = Some((w, h, vs));
         scene.elevation = Some(s.elevation.clone());
         scene.colored_for = None;
+        scene.recolor_frames = 3;
         let (ex, ez) = (w as f32 * cs, h as f32 * cs);
         if view.orbit_target == Vec3::ZERO {
             view.orbit_target = Vec3::new(ex / 2.0, 0.0, ez / 2.0);
@@ -648,6 +651,10 @@ pub fn update_scene(
 
     // Terrain colors per overlay.
     let key = (s.tick, view.overlay, view.region.clone());
+    if scene.recolor_frames > 0 {
+        scene.recolor_frames -= 1;
+        scene.colored_for = None;
+    }
     if scene.colored_for.as_ref() != Some(&key) {
         scene.colored_for = Some(key);
         let region = s.plan.regions.iter().position(|r| *r == view.region).map(|i| &s.regions[i][..]);
@@ -783,6 +790,18 @@ pub fn update_scene(
         if let Some(e) = scene.organisms.remove(&id) {
             commands.entity(e).despawn();
         }
+    }
+}
+
+/// Keep the sky and haze in tune with the UI theme.
+pub fn sky(theme: Res<crate::theme::ActiveTheme>, mut clear: ResMut<ClearColor>, mut fog: Query<&mut bevy::pbr::DistanceFog>) {
+    if !theme.is_changed() {
+        return;
+    }
+    let c = Color::srgb(theme.1.sky[0], theme.1.sky[1], theme.1.sky[2]);
+    clear.0 = c;
+    for mut f in &mut fog {
+        f.color = c;
     }
 }
 
@@ -962,7 +981,12 @@ pub fn pointer_tools(
     };
     match view.tool {
         Tool::Inspect => {
+            // Select on a clean click: pressed and released without dragging the camera.
             if buttons.just_pressed(MouseButton::Left) {
+                view.press_pos = Some(cursor);
+            }
+            let clean = buttons.just_released(MouseButton::Left) && view.press_pos.take().is_some_and(|p0| p0.distance(cursor) < 6.0);
+            if clean {
                 // Prefer a nearby organism, otherwise the cell.
                 let (px, pz) = (cx as f32 * s.cell_size as f32, cz as f32 * s.cell_size as f32);
                 let mut best: Option<(f32, usize, u64)> = None;
@@ -980,16 +1004,6 @@ pub fn pointer_tools(
                     view.selected_entity = Some(id);
                     let _ = link.0.tx.send(ToSim::SelectEntity(Some((a, id))));
                 }
-            }
-        }
-        Tool::PaintRegion | Tool::EraseRegion => {
-            if buttons.pressed(MouseButton::Left) && !view.region.is_empty() && throttle(&mut view) {
-                let value = if view.tool == Tool::PaintRegion { 1.0 } else { 0.0 };
-                let _ = link.0.tx.send(ToSim::Submit(CommandKind::PaintRegion {
-                    region: view.region.clone(),
-                    shape: brush,
-                    value,
-                }));
             }
         }
         Tool::AddWater => {
